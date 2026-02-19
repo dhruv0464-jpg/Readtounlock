@@ -46,66 +46,115 @@ struct MainTabView: View {
     }
 }
 
-struct FreeReadFeedItem: Identifiable {
-    let id: String
+struct FreeReadFeedItem {
     let passage: Passage
-    let paragraph: String
-    let paragraphIndex: Int
-    let totalParagraphs: Int
+    let excerpt: String
+    let segmentIndex: Int
+    let totalSegments: Int
 
-    static let all: [FreeReadFeedItem] = buildFeed()
+    var stableID: String { "\(passage.id)-\(segmentIndex)" }
 
-    private static func buildFeed() -> [FreeReadFeedItem] {
+    var baseLikeCount: Int {
+        120 + ((passage.id * 89 + segmentIndex * 41) % 9200)
+    }
+
+    var shareText: String {
+        "\"\(excerpt)\"\n\nFrom: \(passage.title) • \(passage.category.rawValue)\nShared from Readtounlock"
+    }
+
+    static let seedPool: [FreeReadFeedItem] = buildSeedPool()
+
+    private static func buildSeedPool() -> [FreeReadFeedItem] {
         let normalized: [(Passage, [String])] = PassageLibrary.all.map { passage in
-            let chunks = splitParagraphs(passage.content)
-            return (passage, chunks.isEmpty ? [passage.content.trimmingCharacters(in: .whitespacesAndNewlines)] : chunks)
+            let segments = splitIntoSegments(passage.content)
+            return (passage, segments.isEmpty ? [passage.content.trimmingCharacters(in: .whitespacesAndNewlines)] : segments)
         }
 
-        let maxParagraphs = normalized.map { $0.1.count }.max() ?? 0
-        var feed: [FreeReadFeedItem] = []
+        let maxSegments = normalized.map { $0.1.count }.max() ?? 0
+        var pool: [FreeReadFeedItem] = []
 
-        for index in 0..<maxParagraphs {
-            for (passage, paragraphs) in normalized {
-                guard index < paragraphs.count else { continue }
-                feed.append(
+        for segmentOffset in 0..<maxSegments {
+            for (passage, segments) in normalized {
+                guard segmentOffset < segments.count else { continue }
+                pool.append(
                     FreeReadFeedItem(
-                        id: "\(passage.id)-\(index)",
                         passage: passage,
-                        paragraph: paragraphs[index],
-                        paragraphIndex: index + 1,
-                        totalParagraphs: paragraphs.count
+                        excerpt: segments[segmentOffset],
+                        segmentIndex: segmentOffset + 1,
+                        totalSegments: segments.count
                     )
                 )
             }
         }
 
-        return feed
+        return pool
     }
 
-    private static func splitParagraphs(_ content: String) -> [String] {
-        content
+    // Build longer reel cards: each item is a coherent multi-paragraph chunk.
+    private static func splitIntoSegments(_ content: String) -> [String] {
+        let paragraphs = content
             .components(separatedBy: "\n\n")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { $0.count > 90 }
+            .filter { $0.count > 40 }
+
+        guard !paragraphs.isEmpty else { return [] }
+
+        let targetChars = 950
+        var segments: [String] = []
+        var current: [String] = []
+        var currentCount = 0
+
+        for paragraph in paragraphs {
+            let nextCount = currentCount + paragraph.count + (current.isEmpty ? 0 : 2)
+            if !current.isEmpty && nextCount > targetChars {
+                segments.append(current.joined(separator: "\n\n"))
+                current = [paragraph]
+                currentCount = paragraph.count
+            } else {
+                current.append(paragraph)
+                currentCount = nextCount
+            }
+        }
+
+        if !current.isEmpty {
+            segments.append(current.joined(separator: "\n\n"))
+        }
+
+        return segments
     }
 }
 
-struct FreeReadView: View {
-    @EnvironmentObject var appState: AppState
+struct FreeReadRenderItem: Identifiable {
+    let id = UUID()
+    let content: FreeReadFeedItem
+}
 
-    private let feedItems = FreeReadFeedItem.all
+struct FreeReadView: View {
+    private let likesStorageKey = "freeReadLikedPassageIDs"
+    private let batchSize = 24
+    private let prefetchThreshold = 8
+
+    @State private var feed: [FreeReadRenderItem] = []
+    @State private var seedPool: [FreeReadFeedItem] = []
+    @State private var seedCursor: Int = 0
+    @State private var likedPassageIDs: Set<Int> = Set(UserDefaults.standard.array(forKey: "freeReadLikedPassageIDs") as? [Int] ?? [])
 
     var body: some View {
         GeometryReader { geo in
             ScrollView(.vertical) {
                 LazyVStack(spacing: 0) {
-                    ForEach(Array(feedItems.enumerated()), id: \.element.id) { index, item in
+                    ForEach(Array(feed.enumerated()), id: \.element.id) { index, item in
                         FreeReadCard(
-                            item: item,
-                            position: index + 1,
-                            total: feedItems.count
+                            item: item.content,
+                            isLiked: likedPassageIDs.contains(item.content.passage.id),
+                            onLike: { toggleLike(for: item.content) }
                         )
                         .frame(width: geo.size.width, height: geo.size.height)
+                        .onAppear {
+                            if index >= feed.count - prefetchThreshold {
+                                appendBatch()
+                            }
+                        }
                     }
                 }
                 .scrollTargetLayout()
@@ -113,106 +162,175 @@ struct FreeReadView: View {
             .scrollIndicators(.hidden)
             .scrollTargetBehavior(.paging)
             .background(DS.bg)
-            .safeAreaInset(edge: .top) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Free Read")
-                            .font(.system(size: 22, weight: .bold))
-                            .tracking(-0.5)
-                        Text("Swipe up to keep reading")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(DS.label3)
-                    }
-                    Spacer()
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(
-                    LinearGradient(
-                        colors: [DS.bg.opacity(0.98), DS.bg.opacity(0.45), DS.bg.opacity(0.0)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-            }
         }
         .background(DS.bg)
+        .onAppear {
+            bootFeedIfNeeded()
+        }
+    }
+
+    private func bootFeedIfNeeded() {
+        guard feed.isEmpty else { return }
+        seedPool = FreeReadFeedItem.seedPool.shuffled()
+        appendBatch()
+        appendBatch()
+    }
+
+    private func appendBatch() {
+        guard !FreeReadFeedItem.seedPool.isEmpty else { return }
+        if seedPool.isEmpty { seedPool = FreeReadFeedItem.seedPool.shuffled() }
+
+        var newItems: [FreeReadRenderItem] = []
+        newItems.reserveCapacity(batchSize)
+
+        for _ in 0..<batchSize {
+            if seedCursor >= seedPool.count {
+                seedPool.shuffle()
+                seedCursor = 0
+            }
+            newItems.append(FreeReadRenderItem(content: seedPool[seedCursor]))
+            seedCursor += 1
+        }
+
+        feed.append(contentsOf: newItems)
+    }
+
+    private func toggleLike(for item: FreeReadFeedItem) {
+        if likedPassageIDs.contains(item.passage.id) {
+            likedPassageIDs.remove(item.passage.id)
+        } else {
+            likedPassageIDs.insert(item.passage.id)
+        }
+        UserDefaults.standard.set(Array(likedPassageIDs), forKey: likesStorageKey)
     }
 }
 
 struct FreeReadCard: View {
     let item: FreeReadFeedItem
-    let position: Int
-    let total: Int
+    let isLiked: Bool
+    let onLike: () -> Void
+
+    private var likeCount: Int { item.baseLikeCount + (isLiked ? 1 : 0) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Spacer(minLength: 84)
-
-            HStack(spacing: 8) {
-                CategoryBadge(category: item.passage.category)
-                Text("Paragraph \(item.paragraphIndex)/\(item.totalParagraphs)")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(DS.label4)
-            }
-            .padding(.bottom, 14)
-
-            Text(item.passage.title)
-                .font(.system(size: 28, weight: .bold))
-                .tracking(-0.8)
-                .lineSpacing(3)
-                .padding(.bottom, 14)
-
-            Text(item.paragraph)
-                .font(.system(size: 21, weight: .medium))
-                .lineSpacing(9)
-                .foregroundStyle(DS.label2)
-                .padding(.bottom, 18)
-
-            Text(item.passage.source)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(DS.label4)
-                .lineLimit(1)
-                .padding(.bottom, 14)
-
-            HStack(spacing: 6) {
-                Image(systemName: "book.fill")
-                    .font(.system(size: 11, weight: .semibold))
-                Text("Free Read mode: no quiz, just read")
-                    .font(.system(size: 12, weight: .semibold))
-            }
-            .foregroundStyle(DS.label3)
-            .padding(.bottom, 4)
-
-            Spacer()
-
-            HStack {
-                Text("Card \(position) of \(total)")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(DS.label4)
-                Spacer()
-                HStack(spacing: 5) {
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: 10, weight: .bold))
-                    Text("Swipe for next")
-                        .font(.system(size: 11, weight: .semibold))
-                }
-                .foregroundStyle(DS.label4)
-            }
-            .padding(.bottom, 18)
-        }
-        .padding(.horizontal, 22)
-        .background(
+        ZStack(alignment: .bottomTrailing) {
             LinearGradient(
-                colors: [DS.bg, DS.surface.opacity(0.8)],
-                startPoint: .top,
-                endPoint: .bottom
+                colors: [
+                    DS.bg,
+                    item.passage.category.color.opacity(0.26),
+                    DS.bg
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 0)
-                    .strokeBorder(DS.separator.opacity(0.2), lineWidth: 1)
+                LinearGradient(
+                    colors: [Color.black.opacity(0.1), Color.black.opacity(0.0), Color.black.opacity(0.28)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
             )
-        )
+            .ignoresSafeArea()
+
+            contentOverlay
+                .padding(.leading, 20)
+                .padding(.trailing, 88)
+                .padding(.bottom, 32)
+
+            actionRail
+                .padding(.trailing, 12)
+                .padding(.bottom, 88)
+        }
+        .background(DS.bg)
+    }
+
+    private var contentOverlay: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Spacer()
+
+            HStack(spacing: 8) {
+                Text(item.passage.category.rawValue.uppercased())
+                    .font(.system(size: 11, weight: .black))
+                    .tracking(0.8)
+                    .foregroundStyle(.black)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .background(item.passage.category.color)
+                    .clipShape(Capsule())
+
+                Text("Part \(item.segmentIndex)/\(item.totalSegments)")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(DS.label4)
+            }
+            .padding(.bottom, 10)
+
+            Text(item.passage.title)
+                .font(.system(size: 24, weight: .bold))
+                .tracking(-0.5)
+                .lineLimit(2)
+                .foregroundStyle(.white)
+                .padding(.bottom, 10)
+
+            Text(item.excerpt)
+                .font(.system(size: 16.5, weight: .medium))
+                .lineSpacing(6)
+                .foregroundStyle(DS.label2)
+                .lineLimit(18)
+                .padding(.bottom, 10)
+
+            HStack(spacing: 5) {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 10, weight: .bold))
+                Text("Swipe for next")
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .foregroundStyle(DS.label4)
+        }
+    }
+
+    private var actionRail: some View {
+        VStack(spacing: 18) {
+            Button(action: onLike) {
+                VStack(spacing: 5) {
+                    Image(systemName: isLiked ? "heart.fill" : "heart")
+                        .font(.system(size: 23, weight: .bold))
+                        .foregroundStyle(isLiked ? .red : .white)
+                        .frame(width: 48, height: 48)
+                        .background(Color.black.opacity(0.28))
+                        .clipShape(Circle())
+
+                    Text(formatCount(likeCount))
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+            }
+            .buttonStyle(.plain)
+
+            ShareLink(item: item.shareText) {
+                VStack(spacing: 5) {
+                    Image(systemName: "paperplane.fill")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 48, height: 48)
+                        .background(Color.black.opacity(0.28))
+                        .clipShape(Circle())
+
+                    Text("Share")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+            }
+        }
+    }
+
+    private func formatCount(_ value: Int) -> String {
+        if value >= 1_000_000 {
+            return String(format: "%.1fM", Double(value) / 1_000_000).replacingOccurrences(of: ".0M", with: "M")
+        }
+        if value >= 1_000 {
+            return String(format: "%.1fK", Double(value) / 1_000).replacingOccurrences(of: ".0K", with: "K")
+        }
+        return "\(value)"
     }
 }
 
