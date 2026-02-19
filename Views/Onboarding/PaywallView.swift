@@ -15,10 +15,12 @@ struct PaywallView: View {
         switch appState.paywallEntryPoint {
         case .onboarding:
             return "START STRONG"
+        case .launch:
+            return "UNLOCK ALL FEATURES"
         case .unlockLimitReached:
             return "DAILY LIMIT REACHED"
-        case .premiumFeature:
-            return "PRO FEATURE"
+        case .readLimitReached:
+            return "FREE READS USED"
         case .settings:
             return "UPGRADE"
         }
@@ -28,10 +30,12 @@ struct PaywallView: View {
         switch appState.paywallEntryPoint {
         case .onboarding:
             return "Build a Smarter\nScreen-Time Habit"
+        case .launch:
+            return "Unlock the Full\nReadToUnlock App"
         case .unlockLimitReached:
             return "Keep Unlocking\nWithout Limits"
-        case .premiumFeature:
-            return "Unlock This\nPremium Feature"
+        case .readLimitReached:
+            return "Keep Reading\nWithout Limits"
         case .settings:
             return "Go Pro for\nBetter Results"
         }
@@ -41,10 +45,12 @@ struct PaywallView: View {
         switch appState.paywallEntryPoint {
         case .onboarding:
             return "Make every unlock a learning checkpoint with unlimited reading gates."
+        case .launch:
+            return "Get unlimited app unlocks, unlimited reads, and access to every category from day one."
         case .unlockLimitReached:
             return "You've used today's free unlocks. Upgrade for unlimited app unlocks."
-        case .premiumFeature:
-            return "This part of the app is reserved for Pro members."
+        case .readLimitReached:
+            return "You've used today's free reads. Upgrade for unlimited reading and all categories."
         case .settings:
             return "Get the full Read to Unlock experience with one upgrade."
         }

@@ -413,7 +413,7 @@ struct BlockedOverlayView: View {
                         ForEach(Array(PassageLibrary.all.prefix(3))) { p in
                             Button {
                                 appState.pendingUnlockAppID = blockedApp.id
-                                appState.navigate(to: .reading(p))
+                                appState.startReading(p, isUnlockFlow: true)
                             } label: {
                                 HStack(spacing: 14) {
                                     Circle()

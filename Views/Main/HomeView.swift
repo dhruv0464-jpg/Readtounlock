@@ -13,6 +13,13 @@ struct MainTabView: View {
                     Text("Home")
                 }
                 .tag(MainTab.home)
+
+            FreeReadView()
+                .tabItem {
+                    Image(systemName: "text.quote")
+                    Text("Free Read")
+                }
+                .tag(MainTab.freeRead)
             
             LibraryView()
                 .tabItem {
@@ -36,6 +43,176 @@ struct MainTabView: View {
                 .tag(MainTab.settings)
         }
         .tint(DS.accent)
+    }
+}
+
+struct FreeReadFeedItem: Identifiable {
+    let id: String
+    let passage: Passage
+    let paragraph: String
+    let paragraphIndex: Int
+    let totalParagraphs: Int
+
+    static let all: [FreeReadFeedItem] = buildFeed()
+
+    private static func buildFeed() -> [FreeReadFeedItem] {
+        let normalized: [(Passage, [String])] = PassageLibrary.all.map { passage in
+            let chunks = splitParagraphs(passage.content)
+            return (passage, chunks.isEmpty ? [passage.content.trimmingCharacters(in: .whitespacesAndNewlines)] : chunks)
+        }
+
+        let maxParagraphs = normalized.map { $0.1.count }.max() ?? 0
+        var feed: [FreeReadFeedItem] = []
+
+        for index in 0..<maxParagraphs {
+            for (passage, paragraphs) in normalized {
+                guard index < paragraphs.count else { continue }
+                feed.append(
+                    FreeReadFeedItem(
+                        id: "\(passage.id)-\(index)",
+                        passage: passage,
+                        paragraph: paragraphs[index],
+                        paragraphIndex: index + 1,
+                        totalParagraphs: paragraphs.count
+                    )
+                )
+            }
+        }
+
+        return feed
+    }
+
+    private static func splitParagraphs(_ content: String) -> [String] {
+        content
+            .components(separatedBy: "\n\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { $0.count > 90 }
+    }
+}
+
+struct FreeReadView: View {
+    @EnvironmentObject var appState: AppState
+
+    private let feedItems = FreeReadFeedItem.all
+
+    var body: some View {
+        GeometryReader { geo in
+            ScrollView(.vertical) {
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(feedItems.enumerated()), id: \.element.id) { index, item in
+                        FreeReadCard(
+                            item: item,
+                            position: index + 1,
+                            total: feedItems.count
+                        )
+                        .frame(width: geo.size.width, height: geo.size.height)
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .scrollIndicators(.hidden)
+            .scrollTargetBehavior(.paging)
+            .background(DS.bg)
+            .safeAreaInset(edge: .top) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Free Read")
+                            .font(.system(size: 22, weight: .bold))
+                            .tracking(-0.5)
+                        Text("Swipe up to keep reading")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(DS.label3)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(
+                    LinearGradient(
+                        colors: [DS.bg.opacity(0.98), DS.bg.opacity(0.45), DS.bg.opacity(0.0)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+            }
+        }
+        .background(DS.bg)
+    }
+}
+
+struct FreeReadCard: View {
+    let item: FreeReadFeedItem
+    let position: Int
+    let total: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Spacer(minLength: 84)
+
+            HStack(spacing: 8) {
+                CategoryBadge(category: item.passage.category)
+                Text("Paragraph \(item.paragraphIndex)/\(item.totalParagraphs)")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(DS.label4)
+            }
+            .padding(.bottom, 14)
+
+            Text(item.passage.title)
+                .font(.system(size: 28, weight: .bold))
+                .tracking(-0.8)
+                .lineSpacing(3)
+                .padding(.bottom, 14)
+
+            Text(item.paragraph)
+                .font(.system(size: 21, weight: .medium))
+                .lineSpacing(9)
+                .foregroundStyle(DS.label2)
+                .padding(.bottom, 18)
+
+            Text(item.passage.source)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(DS.label4)
+                .lineLimit(1)
+                .padding(.bottom, 14)
+
+            HStack(spacing: 6) {
+                Image(systemName: "book.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                Text("Free Read mode: no quiz, just read")
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundStyle(DS.label3)
+            .padding(.bottom, 4)
+
+            Spacer()
+
+            HStack {
+                Text("Card \(position) of \(total)")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(DS.label4)
+                Spacer()
+                HStack(spacing: 5) {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 10, weight: .bold))
+                    Text("Swipe for next")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                .foregroundStyle(DS.label4)
+            }
+            .padding(.bottom, 18)
+        }
+        .padding(.horizontal, 22)
+        .background(
+            LinearGradient(
+                colors: [DS.bg, DS.surface.opacity(0.8)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 0)
+                    .strokeBorder(DS.separator.opacity(0.2), lineWidth: 1)
+            )
+        )
     }
 }
 
@@ -153,7 +330,7 @@ struct HomeView: View {
                     
                     ForEach(Array(PassageLibrary.all.prefix(3))) { passage in
                         ReadingCard(passage: passage) {
-                            appState.navigate(to: .reading(passage))
+                            appState.startReading(passage)
                         }
                         .padding(.bottom, 10)
                     }
@@ -193,8 +370,8 @@ struct UnlockBudgetCard: View {
                 Text("Today's Unlock Budget")
                     .font(.system(size: 14, weight: .semibold))
                 Text(appState.isPremiumUser
-                     ? "Unlimited unlocks with Pro"
-                     : "\(appState.freeUnlockCreditsRemaining) of \(AppState.dailyFreeUnlockLimit) free unlocks left")
+                     ? "Unlimited unlocks and unlimited reads with Pro"
+                     : "\(appState.freeUnlockCreditsRemaining)/\(AppState.dailyFreeUnlockLimit) free unlocks · \(appState.freeReadCreditsRemaining)/\(AppState.dailyFreeReadLimit) free reads")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(DS.label3)
             }

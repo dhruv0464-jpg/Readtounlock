@@ -32,13 +32,15 @@ enum AppScreen: Equatable {
 
 enum PaywallEntryPoint {
     case onboarding
+    case launch
     case unlockLimitReached
-    case premiumFeature
+    case readLimitReached
     case settings
 }
 
 enum MainTab: String, CaseIterable {
     case home = "Home"
+    case freeRead = "Free Read"
     case library = "Library"
     case stats = "Stats"
     case settings = "Settings"
@@ -46,6 +48,7 @@ enum MainTab: String, CaseIterable {
     var icon: String {
         switch self {
         case .home: return "house.fill"
+        case .freeRead: return "text.quote"
         case .library: return "books.vertical.fill"
         case .stats: return "chart.bar.fill"
         case .settings: return "gearshape.fill"
@@ -55,6 +58,7 @@ enum MainTab: String, CaseIterable {
 
 class AppState: ObservableObject {
     static let dailyFreeUnlockLimit = 3
+    static let dailyFreeReadLimit = 5
 
     @Published var currentScreen: AppScreen = .splash
     @Published var selectedTab: MainTab = .home
@@ -75,6 +79,8 @@ class AppState: ObservableObject {
     @AppStorage("hapticsEnabled") var hapticsEnabled = true
     @AppStorage("freeUnlockCreditsRemaining") var freeUnlockCreditsRemaining = AppState.dailyFreeUnlockLimit
     @AppStorage("lastUnlockCreditResetAt") private var lastUnlockCreditResetAt: Double = 0
+    @AppStorage("freeReadCreditsRemaining") var freeReadCreditsRemaining = AppState.dailyFreeReadLimit
+    @AppStorage("lastReadCreditResetAt") private var lastReadCreditResetAt: Double = 0
 
     init() {
         refreshDailyUnlockCreditsIfNeeded()
@@ -91,7 +97,7 @@ class AppState: ObservableObject {
         if isPremiumUser {
             goHome()
         } else {
-            presentPaywall(from: .onboarding)
+            presentPaywall(from: .launch)
         }
     }
     
@@ -108,15 +114,24 @@ class AppState: ObservableObject {
 
     func splashDidFinish() {
         refreshDailyUnlockCreditsIfNeeded()
-        if hasCompletedOnboarding {
+        if !hasCompletedOnboarding {
+            navigate(to: .onboarding)
+            return
+        }
+
+        if isPremiumUser {
             navigate(to: .main)
         } else {
-            navigate(to: .onboarding)
+            presentPaywall(from: .launch)
         }
     }
 
     var canUnlockBlockedApps: Bool {
         isPremiumUser || freeUnlockCreditsRemaining > 0
+    }
+
+    var canStartFreeRead: Bool {
+        isPremiumUser || freeReadCreditsRemaining > 0
     }
 
     func markPassageReadyForQuiz(_ passageID: Int) {
@@ -139,19 +154,52 @@ class AppState: ObservableObject {
         return true
     }
 
+    @discardableResult
+    func consumeReadCreditIfNeeded() -> Bool {
+        refreshDailyUnlockCreditsIfNeeded()
+        guard !isPremiumUser else { return true }
+        guard freeReadCreditsRemaining > 0 else {
+            return false
+        }
+
+        freeReadCreditsRemaining -= 1
+        return true
+    }
+
+    func startReading(_ passage: Passage, isUnlockFlow: Bool = false) {
+        if isUnlockFlow {
+            navigate(to: .reading(passage))
+            return
+        }
+
+        if consumeReadCreditIfNeeded() {
+            navigate(to: .reading(passage))
+        } else {
+            presentPaywall(from: .readLimitReached)
+        }
+    }
+
     func refreshDailyUnlockCreditsIfNeeded(referenceDate: Date = Date()) {
         guard !isPremiumUser else {
             freeUnlockCreditsRemaining = AppState.dailyFreeUnlockLimit
+            freeReadCreditsRemaining = AppState.dailyFreeReadLimit
             lastUnlockCreditResetAt = referenceDate.timeIntervalSince1970
+            lastReadCreditResetAt = referenceDate.timeIntervalSince1970
             return
         }
 
         let calendar = Calendar.current
         let lastResetDate = Date(timeIntervalSince1970: lastUnlockCreditResetAt)
+        let lastReadResetDate = Date(timeIntervalSince1970: lastReadCreditResetAt)
 
         if lastUnlockCreditResetAt == 0 || !calendar.isDate(lastResetDate, inSameDayAs: referenceDate) {
             freeUnlockCreditsRemaining = AppState.dailyFreeUnlockLimit
             lastUnlockCreditResetAt = referenceDate.timeIntervalSince1970
+        }
+
+        if lastReadCreditResetAt == 0 || !calendar.isDate(lastReadResetDate, inSameDayAs: referenceDate) {
+            freeReadCreditsRemaining = AppState.dailyFreeReadLimit
+            lastReadCreditResetAt = referenceDate.timeIntervalSince1970
         }
     }
 }

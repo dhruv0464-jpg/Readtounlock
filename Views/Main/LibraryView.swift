@@ -67,10 +67,30 @@ struct LibraryView: View {
                                 .font(.system(size: 12, weight: .semibold))
                             Spacer()
                             Button("Upgrade") {
-                                appState.presentPaywall(from: .premiumFeature)
+                                appState.presentPaywall(from: .launch)
                             }
                             .font(.system(size: 12, weight: .bold))
                             .foregroundStyle(DS.accent)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .background(DS.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .padding(.bottom, 10)
+
+                        HStack(spacing: 8) {
+                            Image(systemName: "book.closed.fill")
+                                .font(.system(size: 11, weight: .bold))
+                            Text("\(appState.freeReadCreditsRemaining) of \(AppState.dailyFreeReadLimit) free reads left today")
+                                .font(.system(size: 12, weight: .semibold))
+                            Spacer()
+                            if !appState.canStartFreeRead {
+                                Button("Upgrade") {
+                                    appState.presentPaywall(from: .readLimitReached)
+                                }
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(DS.accent)
+                            }
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 10)
@@ -109,9 +129,9 @@ struct LibraryView: View {
                         let isLocked = isPremiumLocked(passage)
                         ReadingCard(passage: passage, action: {
                             if isLocked {
-                                appState.presentPaywall(from: .premiumFeature)
+                                appState.presentPaywall(from: .launch)
                             } else {
-                                appState.navigate(to: .reading(passage))
+                                appState.startReading(passage)
                             }
                         }, showDifficulty: true)
                         .overlay(alignment: .topTrailing) {

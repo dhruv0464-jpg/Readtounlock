@@ -7,9 +7,10 @@ struct ReadingView: View {
     @State private var scrollProgress: Double = 0
     @State private var contentHeight: CGFloat = 0
     @State private var viewportHeight: CGFloat = 0
+    @State private var hasReachedBottom = false
     
-    private let readCompletionThreshold = 0.95
-    var canTakeQuiz: Bool { appState.canTakeQuiz(for: passage) }
+    private let readCompletionThreshold = 0.85
+    var canTakeQuiz: Bool { appState.canTakeQuiz(for: passage) || hasReachedBottom }
     
     var body: some View {
         VStack(spacing: 0) {
@@ -72,6 +73,13 @@ struct ReadingView: View {
                         .lineSpacing(10)
                         .foregroundStyle(DS.label2)
                         .padding(.bottom, 36)
+
+                    // Bottom marker: once this appears, the passage is considered read.
+                    Color.clear
+                        .frame(height: 1)
+                        .onAppear {
+                            unlockQuizIfNeeded()
+                        }
                     
                     // Progress section
                     VStack(spacing: 8) {
@@ -108,11 +116,6 @@ struct ReadingView: View {
                             Text("Nice. You finished reading.")
                                 .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(DS.label3)
-
-                            PrimaryButton(title: "Take Quiz", icon: "brain") {
-                                appState.markPassageReadyForQuiz(passage.id)
-                                appState.navigate(to: .quiz(passage))
-                            }
                         }
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
                         .padding(.bottom, 20)
@@ -141,6 +144,7 @@ struct ReadingView: View {
                 }
                 .padding(.horizontal, 24)
                 .padding(.top, 16)
+                .padding(.bottom, canTakeQuiz ? 120 : 30)
                 .background(
                     GeometryReader { geo in
                         Color.clear
@@ -162,8 +166,11 @@ struct ReadingView: View {
                         scrollProgress = min(1, max(0, Double(-offset) / scrollable))
                     }
                     if scrollProgress >= readCompletionThreshold {
-                        appState.markPassageReadyForQuiz(passage.id)
+                        unlockQuizIfNeeded()
                     }
+                } else {
+                    scrollProgress = 1
+                    unlockQuizIfNeeded()
                 }
             }
             .background(
@@ -174,7 +181,41 @@ struct ReadingView: View {
                 }
             )
         }
+        .safeAreaInset(edge: .bottom) {
+            if canTakeQuiz {
+                VStack(spacing: 8) {
+                    Text("Quiz unlocked")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(DS.label3)
+
+                    PrimaryButton(title: "Take Quiz", icon: "brain") {
+                        unlockQuizIfNeeded()
+                        appState.navigate(to: .quiz(passage))
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 10)
+                .padding(.bottom, 10)
+                .background(
+                    LinearGradient(
+                        colors: [DS.bg.opacity(0.0), DS.bg.opacity(0.92), DS.bg],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+            }
+        }
+        .onAppear {
+            if appState.canTakeQuiz(for: passage) {
+                hasReachedBottom = true
+            }
+        }
         .background(DS.bg)
+    }
+
+    private func unlockQuizIfNeeded() {
+        hasReachedBottom = true
+        appState.markPassageReadyForQuiz(passage.id)
     }
 }
 
