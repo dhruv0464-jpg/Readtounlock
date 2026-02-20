@@ -31,8 +31,8 @@ struct LibraryView: View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 0) {
                     Text("Library")
-                        .font(.system(size: 28, weight: .bold))
-                        .tracking(-0.8)
+                        .font(.system(size: 38, weight: .bold, design: .serif))
+                        .tracking(-0.7)
                         .padding(.bottom, 4)
                     
                     Text("\(PassageLibrary.all.count) passages · Free & Public Domain")

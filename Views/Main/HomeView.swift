@@ -341,6 +341,31 @@ struct HomeView: View {
     @EnvironmentObject var mgr: ReadingManager
     @EnvironmentObject var screenTime: ScreenTimeManager
     @State private var showScreenTimeSetup = false
+
+    private let discoverTopics: [(icon: String, title: String, color: Color)] = [
+        ("person.crop.circle.badge.checkmark", "Self-Growth", Color(hex: "9BA96B")),
+        ("bubble.left.and.text.bubble.right", "Communication", Color(hex: "C7AE73")),
+        ("briefcase", "Career & Business", Color(hex: "A87757")),
+        ("book.closed", "Fiction", Color(hex: "8F9978")),
+        ("banknote", "Finance & Economics", Color(hex: "7A8F59")),
+        ("heart", "Relationships", Color(hex: "B7846A")),
+    ]
+
+    private let moodPrompts: [(title: String, subtitle: String)] = [
+        ("Taking a late walk", "wanting something reflective"),
+        ("Before a hard conversation", "wanting clear words"),
+        ("When focus feels low", "wanting sharp concentration"),
+        ("After a long day", "wanting calm and reset"),
+    ]
+
+    private var featuredPassages: [Passage] {
+        Array(PassageLibrary.all.prefix(6))
+    }
+
+    private var communityPassages: [Passage] {
+        let pool = PassageLibrary.all.dropFirst(6)
+        return Array(pool.prefix(6))
+    }
     
     var body: some View {
         NavigationStack {
@@ -348,45 +373,97 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     // Header
                     HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Good morning")
-                                .font(.system(size: 14))
-                                .foregroundStyle(DS.label3)
-                            Text(appState.userName.isEmpty ? "Reader" : appState.userName)
-                                .font(.system(size: 28, weight: .bold))
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Discover")
+                                .font(.system(size: 42, weight: .bold, design: .serif))
                                 .tracking(-0.8)
+                            Text("Hey \(appState.userName.isEmpty ? "Reader" : appState.userName), pick what to learn next.")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(DS.label3)
                         }
                         Spacer()
-                        if appState.isPremiumUser {
-                            HStack(spacing: 5) {
-                                Image(systemName: "crown.fill")
-                                    .font(.system(size: 13))
-                                Text("PRO")
-                                    .font(.system(size: 12, weight: .black))
+
+                        Button {
+                            appState.selectedTab = .library
+                        } label: {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 42, height: 42)
+                                .background(DS.surface2)
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.bottom, 14)
+
+                    CreateLessonPromptCard {
+                        appState.selectedTab = .library
+                    }
+                    .padding(.bottom, 14)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(discoverTopics, id: \.title) { topic in
+                                DiscoverTopicChip(icon: topic.icon, title: topic.title, color: topic.color)
                             }
-                            .foregroundStyle(.black)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(DS.accent)
-                            .clipShape(Capsule())
-                        } else {
-                            HStack(spacing: 5) {
-                                Image(systemName: "flame.fill")
-                                    .font(.system(size: 16))
-                                Text("\(mgr.streak)")
-                                    .font(.system(size: 15, weight: .bold))
-                            }
-                            .foregroundStyle(DS.accent)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 7)
-                            .background(DS.accent.opacity(0.12))
-                            .clipShape(Capsule())
                         }
                     }
-                    .padding(.bottom, 16)
+                    .padding(.bottom, 20)
+
+                    Text("Featured")
+                        .font(.system(size: 42, weight: .bold, design: .serif))
+                        .tracking(-0.7)
+                        .padding(.bottom, 10)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            ForEach(featuredPassages) { passage in
+                                FeaturedLessonCard(passage: passage) {
+                                    appState.startReading(passage)
+                                }
+                            }
+                        }
+                    }
+                    .padding(.bottom, 22)
+
+                    Text("Learn by mood")
+                        .font(.system(size: 40, weight: .bold, design: .serif))
+                        .tracking(-0.7)
+                        .padding(.bottom, 10)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(moodPrompts, id: \.title) { mood in
+                                MoodPromptCard(title: mood.title, subtitle: mood.subtitle)
+                            }
+                        }
+                    }
+                    .padding(.bottom, 22)
+
+                    Text("More creations by community")
+                        .font(.system(size: 36, weight: .bold, design: .serif))
+                        .tracking(-0.6)
+                        .padding(.bottom, 10)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            ForEach(communityPassages) { passage in
+                                FeaturedLessonCard(passage: passage, compact: true) {
+                                    appState.startReading(passage)
+                                }
+                            }
+                        }
+                    }
+                    .padding(.bottom, 22)
+
+                    Text("Daily Guardrails")
+                        .font(.system(size: 32, weight: .bold, design: .serif))
+                        .tracking(-0.5)
+                        .padding(.bottom, 10)
 
                     UnlockBudgetCard()
-                        .padding(.bottom, 12)
+                    .padding(.bottom, 12)
 
                     if !appState.isPremiumUser {
                         UpgradeStrip {
@@ -440,7 +517,7 @@ struct HomeView: View {
                     
                     // Suggested readings
                     SectionHeader(
-                        title: "Read Now",
+                        title: "Quick Starts",
                         trailing: "See All",
                         trailingAction: { appState.selectedTab = .library }
                     )
@@ -467,6 +544,157 @@ struct HomeView: View {
             ScreenTimeSetupView()
                 .environmentObject(screenTime)
         }
+    }
+}
+
+struct CreateLessonPromptCard: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 14) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Make My Own Lesson")
+                        .font(.system(size: 30, weight: .bold, design: .serif))
+                        .tracking(-0.4)
+                        .foregroundStyle(.white)
+                    Text("Describe what you want to learn and we’ll build a reading path.")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(DS.label3)
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 0)
+
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 12, weight: .bold))
+                    Text("Create")
+                        .font(.system(size: 18, weight: .bold))
+                }
+                .foregroundStyle(.black)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(.white)
+                .clipShape(Capsule())
+            }
+            .padding(16)
+            .background(
+                LinearGradient(
+                    colors: [Color(hex: "2A2418"), Color(hex: "1E2417"), Color(hex: "162013")],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 24))
+            .overlay(
+                RoundedRectangle(cornerRadius: 24)
+                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct DiscoverTopicChip: View {
+    let icon: String
+    let title: String
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(color)
+
+            Text(title)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(DS.label2)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(DS.surface)
+        .clipShape(Capsule())
+        .overlay(
+            Capsule().strokeBorder(DS.separator, lineWidth: 1)
+        )
+    }
+}
+
+struct FeaturedLessonCard: View {
+    let passage: Passage
+    var compact: Bool = false
+    let action: () -> Void
+
+    private var cardWidth: CGFloat { compact ? 150 : 176 }
+    private var cardHeight: CGFloat { compact ? 188 : 246 }
+    private var sourceCount: Int { 4 + ((passage.id * 7) % 35) }
+
+    var body: some View {
+        Button(action: action) {
+            ZStack(alignment: .bottomLeading) {
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                passage.category.color.opacity(0.85),
+                                Color.black.opacity(0.75),
+                                passage.category.color.opacity(0.35),
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(passage.title)
+                        .font(.system(size: compact ? 20 : 28, weight: .bold, design: .serif))
+                        .tracking(-0.4)
+                        .foregroundStyle(.white)
+                        .lineLimit(compact ? 3 : 4)
+                        .padding(.bottom, 8)
+
+                    Text("\(sourceCount) sources")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.8))
+                }
+                .padding(12)
+            }
+            .frame(width: cardWidth, height: cardHeight)
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct MoodPromptCard: View {
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(.white)
+                .lineLimit(2)
+
+            Text(subtitle)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(DS.label3)
+                .lineLimit(2)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(width: 290, alignment: .leading)
+        .background(DS.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20)
+                .strokeBorder(DS.separator, lineWidth: 1)
+        )
     }
 }
 

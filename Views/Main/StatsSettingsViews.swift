@@ -10,8 +10,8 @@ struct StatsView: View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 0) {
                     Text("Your Stats")
-                        .font(.system(size: 28, weight: .bold))
-                        .tracking(-0.8)
+                        .font(.system(size: 38, weight: .bold, design: .serif))
+                        .tracking(-0.7)
                         .padding(.bottom, 20)
                     
                     // Big streak card
@@ -115,8 +115,8 @@ struct SettingsView: View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 24) {
                     Text("Settings")
-                        .font(.system(size: 28, weight: .bold))
-                        .tracking(-0.8)
+                        .font(.system(size: 38, weight: .bold, design: .serif))
+                        .tracking(-0.7)
                     
                     // Reading section
                     GroupedSection(label: "Reading") {

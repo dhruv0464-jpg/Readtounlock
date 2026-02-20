@@ -4,13 +4,13 @@ import SwiftUI
 
 enum DS {
     // Colors
-    static let bg = Color(hex: "070C17")
-    static let surface = Color(hex: "151D2B")
-    static let surface2 = Color(hex: "1D2737")
-    static let surface3 = Color(hex: "2A3548")
-    static let separator = Color(hex: "2E3A4D")
-    static let accent = Color(hex: "FFC93C")
-    static let accent2 = Color(hex: "FFB020")
+    static let bg = Color(hex: "080A07")
+    static let surface = Color(hex: "12160F")
+    static let surface2 = Color(hex: "1B2116")
+    static let surface3 = Color(hex: "2A3224")
+    static let separator = Color(hex: "333C2D")
+    static let accent = Color(hex: "C8B47A")
+    static let accent2 = Color(hex: "A08D59")
     static let label = Color.white
     static let label2 = Color.white.opacity(0.85)
     static let label3 = Color.white.opacity(0.6)

@@ -64,11 +64,11 @@ struct OnboardingStep1: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
-                OnboardingIcon(gradient: [Color(hex: "FFD60A"), Color(hex: "FF9F0A")], systemName: "book.fill")
+                OnboardingIcon(gradient: [Color(hex: "D2C08A"), Color(hex: "A58E5E")], systemName: "book.fill")
                     .padding(.bottom, 28)
                 
                 Text("Read Before\nYou Scroll")
-                    .font(.system(size: 34, weight: .bold))
+                    .font(.system(size: 38, weight: .bold, design: .serif))
                     .tracking(-1.2)
                     .lineSpacing(2)
                     .padding(.bottom, 14)
@@ -91,11 +91,11 @@ struct OnboardingStep2: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
-                OnboardingIcon(gradient: [Color(hex: "BF5AF2"), Color(hex: "7B61FF")], systemName: "brain")
+                OnboardingIcon(gradient: [Color(hex: "8E9972"), Color(hex: "687553")], systemName: "brain")
                     .padding(.bottom, 28)
                 
                 Text("How It\nWorks")
-                    .font(.system(size: 34, weight: .bold))
+                    .font(.system(size: 38, weight: .bold, design: .serif))
                     .tracking(-1.2)
                     .lineSpacing(2)
                     .padding(.bottom, 14)
@@ -107,9 +107,9 @@ struct OnboardingStep2: View {
                     .padding(.bottom, 28)
                 
                 VStack(spacing: 10) {
-                    FeatureRow(icon: "lock.fill", color: .red, title: "App Gets Blocked", subtitle: "When you hit your daily time limit")
+                    FeatureRow(icon: "lock.fill", color: Color(hex: "B16953"), title: "App Gets Blocked", subtitle: "When you hit your daily time limit")
                     FeatureRow(icon: "book.fill", color: DS.accent, title: "Read a Passage", subtitle: "Short, curated readings on real topics")
-                    FeatureRow(icon: "checkmark", color: .green, title: "Pass the Quiz", subtitle: "2/3 correct and you're in")
+                    FeatureRow(icon: "checkmark", color: Color(hex: "88A26A"), title: "Pass the Quiz", subtitle: "2/3 correct and you're in")
                 }
                 
                 Spacer(minLength: 40)
@@ -133,11 +133,11 @@ struct OnboardingStep3: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
-                OnboardingIcon(gradient: [Color(hex: "0A84FF"), Color(hex: "64D2FF")], systemName: "shield.fill")
+                OnboardingIcon(gradient: [Color(hex: "829064"), Color(hex: "5E6B49")], systemName: "shield.fill")
                     .padding(.bottom, 28)
                 
                 Text("Choose Apps\nto Gate")
-                    .font(.system(size: 34, weight: .bold))
+                    .font(.system(size: 38, weight: .bold, design: .serif))
                     .tracking(-1.2)
                     .lineSpacing(2)
                     .padding(.bottom, 14)
@@ -171,11 +171,11 @@ struct OnboardingStep4: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
-                OnboardingIcon(gradient: [Color(hex: "30D158"), Color(hex: "34C759")], systemName: "trophy.fill")
+                OnboardingIcon(gradient: [Color(hex: "C8B47A"), Color(hex: "9F8A56")], systemName: "trophy.fill")
                     .padding(.bottom, 28)
                 
                 Text("You're\nAll Set")
-                    .font(.system(size: 34, weight: .bold))
+                    .font(.system(size: 38, weight: .bold, design: .serif))
                     .tracking(-1.2)
                     .lineSpacing(2)
                     .padding(.bottom, 14)
@@ -188,8 +188,8 @@ struct OnboardingStep4: View {
                 
                 VStack(spacing: 10) {
                     FeatureRow(icon: "flame.fill", color: DS.accent, title: "Daily Streaks", subtitle: "Read every day to keep your streak alive", highlighted: true)
-                    FeatureRow(icon: "chart.bar.fill", color: .blue, title: "Learning Stats", subtitle: "Track passages read, accuracy, and more")
-                    FeatureRow(icon: "crown.fill", color: Color(hex: "BF5AF2"), title: "Earn Badges", subtitle: "Complete challenges to level up")
+                    FeatureRow(icon: "chart.bar.fill", color: Color(hex: "8D9671"), title: "Learning Stats", subtitle: "Track passages read, accuracy, and more")
+                    FeatureRow(icon: "crown.fill", color: Color(hex: "B5905F"), title: "Earn Badges", subtitle: "Complete challenges to level up")
                 }
                 
                 Spacer(minLength: 40)

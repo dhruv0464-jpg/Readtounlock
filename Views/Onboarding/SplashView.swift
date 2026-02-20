@@ -14,7 +14,7 @@ struct SplashView: View {
             RoundedRectangle(cornerRadius: 22)
                 .fill(
                     LinearGradient(
-                        colors: [Color(hex: "FFD60A"), Color(hex: "FF9F0A")],
+                        colors: [Color(hex: "D8C695"), Color(hex: "A48E5A")],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
@@ -25,14 +25,14 @@ struct SplashView: View {
                         .font(.system(size: 36, weight: .semibold))
                         .foregroundStyle(.black)
                 )
-                .shadow(color: Color(hex: "FFD60A").opacity(0.25), radius: 30)
+                .shadow(color: Color(hex: "C8B47A").opacity(0.26), radius: 30)
                 .scaleEffect(iconScale)
                 .opacity(iconOpacity)
             
             // Title
             VStack(spacing: 4) {
                 Text("Read to Unlock")
-                    .font(.system(size: 26, weight: .bold))
+                    .font(.system(size: 32, weight: .bold, design: .serif))
                     .tracking(-0.8)
                 
                 Text("Learn before you scroll")
@@ -46,7 +46,7 @@ struct SplashView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
             LinearGradient(
-                colors: [Color(hex: "1a1500"), .black, .black],
+                colors: [Color(hex: "1A1E15"), DS.bg, Color(hex: "090A08")],
                 startPoint: .top,
                 endPoint: .center
             )
