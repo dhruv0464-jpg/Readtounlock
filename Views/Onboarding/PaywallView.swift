@@ -70,7 +70,7 @@ struct PaywallView: View {
     var body: some View {
         ZStack {
             LinearGradient(
-                colors: [Color(hex: "0F1730"), Color(hex: "091126"), DS.bg],
+                colors: [Color(hex: "1A1410"), Color(hex: "120E0A"), DS.bg],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
@@ -154,7 +154,7 @@ struct PaywallView: View {
             RoundedRectangle(cornerRadius: 22)
                 .fill(
                     LinearGradient(
-                        colors: [Color(hex: "D2E8FF"), DS.accent, Color(hex: "80B8FF")],
+                        colors: [Color(hex: "F5D77A"), DS.accent, Color(hex: "C99A2E")],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
@@ -299,7 +299,7 @@ struct PaywallPlanCard: View {
                 if let savings = plan.savings {
                     Text(savings)
                         .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.green)
+                        .foregroundStyle(DS.success)
                 } else {
                     Color.clear.frame(height: 12)
                 }

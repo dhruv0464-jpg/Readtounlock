@@ -96,10 +96,10 @@ struct QuizView: View {
                             Text(isCorrect ? "Correct!" : "Not quite — correct answer highlighted above.")
                                 .font(.system(size: 14, weight: .semibold))
                         }
-                        .foregroundStyle(isCorrect ? .green : .red)
+                        .foregroundStyle(isCorrect ? DS.success : .red)
                         .padding(14)
                         .frame(maxWidth: .infinity)
-                        .background((isCorrect ? Color.green : Color.red).opacity(0.1))
+                        .background((isCorrect ? DS.success : Color.red).opacity(0.1))
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         .padding(.top, 12)
                     }
@@ -117,7 +117,7 @@ struct QuizView: View {
     
     private func dotColor(for index: Int) -> Color {
         if let correct = submitted[index] {
-            return correct ? .green : .red
+            return correct ? DS.success : .red
         }
         return index <= currentQ ? DS.accent : DS.surface3
     }
@@ -167,25 +167,25 @@ struct OptionButton: View {
         switch state {
         case .idle: return DS.surface
         case .selected: return DS.accent.opacity(0.08)
-        case .correct: return Color.green.opacity(0.1)
+        case .correct: return DS.success.opacity(0.1)
         case .wrong: return Color.red.opacity(0.1)
         }
     }
-    
+
     var border: Color {
         switch state {
         case .idle: return DS.separator
         case .selected: return DS.accent
-        case .correct: return .green
+        case .correct: return DS.success
         case .wrong: return .red
         }
     }
-    
+
     var letterBg: Color {
         switch state {
         case .idle: return DS.surface2
         case .selected: return DS.accent
-        case .correct: return .green
+        case .correct: return DS.success
         case .wrong: return .red
         }
     }
@@ -247,12 +247,12 @@ struct ResultsView: View {
             
             // Icon
             RoundedRectangle(cornerRadius: 28)
-                .fill(passed ? Color.green.opacity(0.12) : Color.red.opacity(0.12))
+                .fill(passed ? DS.accent.opacity(0.12) : Color.red.opacity(0.12))
                 .frame(width: 96, height: 96)
                 .overlay(
                     Image(systemName: passed ? "lock.open.fill" : "lock.fill")
                         .font(.system(size: 36, weight: .semibold))
-                        .foregroundStyle(passed ? .green : .red)
+                        .foregroundStyle(passed ? DS.accent : .red)
                 )
                 .padding(.bottom, 24)
             
@@ -272,7 +272,7 @@ struct ResultsView: View {
             // Score
             Text("\(score)/\(total)")
                 .font(.system(size: 52, weight: .bold, design: .monospaced))
-                .foregroundStyle(passed ? .green : .red)
+                .foregroundStyle(passed ? DS.accent : .red)
                 .padding(.bottom, 6)
             
             Text("Questions Correct")

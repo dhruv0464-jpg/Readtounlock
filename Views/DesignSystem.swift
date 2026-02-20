@@ -3,19 +3,24 @@ import SwiftUI
 // MARK: - Design Tokens
 
 enum DS {
-    // Colors
-    static let bg = Color(hex: "040814")
-    static let surface = Color(hex: "0B1428")
-    static let surface2 = Color(hex: "12203C")
-    static let surface3 = Color(hex: "1C3158")
-    static let separator = Color(hex: "2B4674")
-    static let accent = Color(hex: "A9D5FF")
-    static let accent2 = Color(hex: "6EA9FF")
+    // Colors — Primary Golden Palette
+    static let bg = Color(hex: "0C0907")
+    static let surface = Color(hex: "1A1410")
+    static let surface2 = Color(hex: "2A2119")
+    static let surface3 = Color(hex: "3D3128")
+    static let separator = Color(hex: "4D3E32")
+    static let accent = Color(hex: "EDBE53")      // Primary golden
+    static let accent2 = Color(hex: "C99A2E")      // Darker gold
+    static let accentLight = Color(hex: "F5D77A")   // Lighter gold highlight
+    static let accentMuted = Color(hex: "D4A853")   // Muted warm gold
+    static let success = Color(hex: "D4B86A")        // Golden-success (replaces green)
+    static let successBg = Color(hex: "D4B86A")      // Golden-success background tint
+    static let warning = Color(hex: "C9A65A")         // Golden-warning (replaces orange)
     static let label = Color.white
     static let label2 = Color.white.opacity(0.85)
     static let label3 = Color.white.opacity(0.6)
     static let label4 = Color.white.opacity(0.3)
-    
+
     // Spacing
     static let screenPadding: CGFloat = 20
     static let cardRadius: CGFloat = 16
@@ -80,7 +85,7 @@ struct ToggleRow: View {
                 .font(.system(size: 16))
             Spacer()
             Toggle("", isOn: $isOn)
-                .tint(Color.green)
+                .tint(DS.accent)
                 .labelsHidden()
         }
         .padding(.horizontal, 16)

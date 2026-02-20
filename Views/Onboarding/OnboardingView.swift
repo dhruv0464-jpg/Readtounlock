@@ -64,7 +64,7 @@ struct OnboardingStep1: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
-                OnboardingIcon(gradient: [Color(hex: "9CC9FF"), Color(hex: "5F8FD8")], systemName: "book.fill")
+                OnboardingIcon(gradient: [Color(hex: "EDBE53"), Color(hex: "C99A2E")], systemName: "book.fill")
                     .padding(.bottom, 28)
                 
                 Text("Read Before\nYou Scroll")
@@ -91,7 +91,7 @@ struct OnboardingStep2: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
-                OnboardingIcon(gradient: [Color(hex: "85B9FF"), Color(hex: "4E76C2")], systemName: "brain")
+                OnboardingIcon(gradient: [Color(hex: "D4A853"), Color(hex: "A07830")], systemName: "brain")
                     .padding(.bottom, 28)
                 
                 Text("How It\nWorks")
@@ -107,9 +107,9 @@ struct OnboardingStep2: View {
                     .padding(.bottom, 28)
                 
                 VStack(spacing: 10) {
-                    FeatureRow(icon: "lock.fill", color: Color(hex: "8CB5FF"), title: "App Gets Blocked", subtitle: "When you hit your daily time limit")
+                    FeatureRow(icon: "lock.fill", color: Color(hex: "C48B5C"), title: "App Gets Blocked", subtitle: "When you hit your daily time limit")
                     FeatureRow(icon: "book.fill", color: DS.accent, title: "Read a Passage", subtitle: "Short, curated readings on real topics")
-                    FeatureRow(icon: "checkmark", color: Color(hex: "9FD7FF"), title: "Pass the Quiz", subtitle: "2/3 correct and you're in")
+                    FeatureRow(icon: "checkmark", color: Color(hex: "D4B86A"), title: "Pass the Quiz", subtitle: "2/3 correct and you're in")
                 }
                 
                 Spacer(minLength: 40)
@@ -133,7 +133,7 @@ struct OnboardingStep3: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
-                OnboardingIcon(gradient: [Color(hex: "7CAFFF"), Color(hex: "466CB5")], systemName: "shield.fill")
+                OnboardingIcon(gradient: [Color(hex: "C48B5C"), Color(hex: "8B5E35")], systemName: "shield.fill")
                     .padding(.bottom, 28)
                 
                 Text("Choose Apps\nto Gate")
@@ -171,7 +171,7 @@ struct OnboardingStep4: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
-                OnboardingIcon(gradient: [Color(hex: "A7D5FF"), Color(hex: "6FA8FF")], systemName: "trophy.fill")
+                OnboardingIcon(gradient: [Color(hex: "EDBE53"), Color(hex: "D4A853")], systemName: "trophy.fill")
                     .padding(.bottom, 28)
                 
                 Text("You're\nAll Set")
@@ -188,8 +188,8 @@ struct OnboardingStep4: View {
                 
                 VStack(spacing: 10) {
                     FeatureRow(icon: "flame.fill", color: DS.accent, title: "Daily Streaks", subtitle: "Read every day to keep your streak alive", highlighted: true)
-                    FeatureRow(icon: "chart.bar.fill", color: Color(hex: "89BDFF"), title: "Learning Stats", subtitle: "Track passages read, accuracy, and more")
-                    FeatureRow(icon: "crown.fill", color: Color(hex: "A9D5FF"), title: "Earn Badges", subtitle: "Complete challenges to level up")
+                    FeatureRow(icon: "chart.bar.fill", color: Color(hex: "C48B5C"), title: "Learning Stats", subtitle: "Track passages read, accuracy, and more")
+                    FeatureRow(icon: "crown.fill", color: Color(hex: "EDBE53"), title: "Earn Badges", subtitle: "Complete challenges to level up")
                 }
                 
                 Spacer(minLength: 40)

@@ -69,22 +69,22 @@ struct ScreenTimeSetupView: View {
             statusRow(
                 title: "Framework Support",
                 value: screenTime.isFrameworkSupported ? "Available" : "Unavailable",
-                color: screenTime.isFrameworkSupported ? .green : .red
+                color: screenTime.isFrameworkSupported ? DS.success : .red
             )
             statusRow(
                 title: "Authorization",
                 value: screenTime.isAuthorized ? "Granted" : "Not Granted",
-                color: screenTime.isAuthorized ? .green : .orange
+                color: screenTime.isAuthorized ? DS.success : DS.warning
             )
             statusRow(
                 title: "Protected Items",
                 value: "\(screenTime.selectedItemsCount)",
-                color: screenTime.selectedItemsCount > 0 ? .green : DS.label3
+                color: screenTime.selectedItemsCount > 0 ? DS.success : DS.label3
             )
             statusRow(
                 title: "Monitoring",
                 value: screenTime.isMonitoring ? "Active" : "Inactive",
-                color: screenTime.isMonitoring ? .green : DS.label3
+                color: screenTime.isMonitoring ? DS.success : DS.label3
             )
         }
         .padding(14)

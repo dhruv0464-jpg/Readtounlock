@@ -163,13 +163,13 @@ struct SettingsView: View {
                             icon: "🛡️",
                             title: "Authorization",
                             value: screenTime.isAuthorized ? "Granted" : "Not Granted",
-                            valueColor: screenTime.isAuthorized ? .green : .orange
+                            valueColor: screenTime.isAuthorized ? DS.success : DS.warning
                         )
                         NavRow(
                             icon: "📱",
                             title: "Protected Selection",
                             value: "\(screenTime.selectedItemsCount) items",
-                            valueColor: screenTime.selectedItemsCount > 0 ? .green : DS.label4,
+                            valueColor: screenTime.selectedItemsCount > 0 ? DS.success : DS.label4,
                             isLast: true
                         )
                     }
@@ -194,7 +194,7 @@ struct SettingsView: View {
                             icon: "⭐",
                             title: appState.isPremiumUser ? "Pro Membership" : "Upgrade to Pro",
                             value: appState.isPremiumUser ? "Active" : nil,
-                            valueColor: appState.isPremiumUser ? .green : DS.accent
+                            valueColor: appState.isPremiumUser ? DS.success : DS.accent
                         )
                         NavRow(icon: "❓", title: "Help & Support", isLast: true)
                     }

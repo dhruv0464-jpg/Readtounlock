@@ -183,14 +183,14 @@ struct FreeReadFeedItem {
 
     private static func palette(for category: PassageCategory) -> [Color] {
         switch category {
-        case .science: return [Color(hex: "2A427B"), Color(hex: "1B2748"), Color(hex: "0B152E")]
-        case .history: return [Color(hex: "3C3F6E"), Color(hex: "232C56"), Color(hex: "121A38")]
-        case .philosophy: return [Color(hex: "2E4A7A"), Color(hex: "1A315C"), Color(hex: "0D1B3D")]
-        case .economics: return [Color(hex: "2B3D70"), Color(hex: "172A52"), Color(hex: "0C1736")]
-        case .psychology: return [Color(hex: "3A4E8A"), Color(hex: "1C2F63"), Color(hex: "101E43")]
-        case .literature: return [Color(hex: "384C86"), Color(hex: "1F315A"), Color(hex: "0F1C3D")]
-        case .mathematics: return [Color(hex: "3B508F"), Color(hex: "20366A"), Color(hex: "101F47")]
-        case .technology: return [Color(hex: "2A4378"), Color(hex: "182E5A"), Color(hex: "0D1B3F")]
+        case .science: return [Color(hex: "58371F"), Color(hex: "3D2615"), Color(hex: "1E130A")]
+        case .history: return [Color(hex: "5C3A22"), Color(hex: "3E2718"), Color(hex: "1F140C")]
+        case .philosophy: return [Color(hex: "4D3B24"), Color(hex: "35291A"), Color(hex: "1A150D")]
+        case .economics: return [Color(hex: "53381E"), Color(hex: "3A2714"), Color(hex: "1D140A")]
+        case .psychology: return [Color(hex: "5A3D28"), Color(hex: "3C2A1B"), Color(hex: "1E150D")]
+        case .literature: return [Color(hex: "4F3424"), Color(hex: "372518"), Color(hex: "1B130C")]
+        case .mathematics: return [Color(hex: "5E3F22"), Color(hex: "402C17"), Color(hex: "20160B")]
+        case .technology: return [Color(hex: "4A361F"), Color(hex: "332515"), Color(hex: "1A130A")]
         }
     }
 
@@ -209,7 +209,7 @@ struct FreeReadFeedItem {
             category: .psychology,
             source: "ReadToUnlock Editorial",
             symbol: "sparkles.rectangle.stack.fill",
-            palette: [Color(hex: "2E4A83"), Color(hex: "1A315E"), Color(hex: "0D1C3F")]
+            palette: [Color(hex: "5A3D28"), Color(hex: "3C2A1B"), Color(hex: "1E150D")]
         ),
         FreeReadStory(
             id: "borrowed-urgency",
@@ -225,7 +225,7 @@ struct FreeReadFeedItem {
             category: .philosophy,
             source: "ReadToUnlock Editorial",
             symbol: "flame.fill",
-            palette: [Color(hex: "2B3F72"), Color(hex: "182955"), Color(hex: "0D1737")]
+            palette: [Color(hex: "4D3B24"), Color(hex: "35291A"), Color(hex: "1A150D")]
         ),
         FreeReadStory(
             id: "small-decisions",
@@ -241,7 +241,7 @@ struct FreeReadFeedItem {
             category: .science,
             source: "ReadToUnlock Editorial",
             symbol: "brain.head.profile",
-            palette: [Color(hex: "3A4E8A"), Color(hex: "1F3464"), Color(hex: "0F2044")]
+            palette: [Color(hex: "58371F"), Color(hex: "3D2615"), Color(hex: "1E130A")]
         ),
         FreeReadStory(
             id: "twenty-minutes",
@@ -257,7 +257,7 @@ struct FreeReadFeedItem {
             category: .economics,
             source: "ReadToUnlock Editorial",
             symbol: "chart.line.uptrend.xyaxis",
-            palette: [Color(hex: "2F477F"), Color(hex: "1A2F5D"), Color(hex: "0E1D41")]
+            palette: [Color(hex: "53381E"), Color(hex: "3A2714"), Color(hex: "1D140A")]
         ),
         FreeReadStory(
             id: "social-courage",
@@ -273,7 +273,7 @@ struct FreeReadFeedItem {
             category: .psychology,
             source: "ReadToUnlock Editorial",
             symbol: "person.2.wave.2.fill",
-            palette: [Color(hex: "385093"), Color(hex: "21366A"), Color(hex: "102145")]
+            palette: [Color(hex: "5A3D28"), Color(hex: "3C2A1B"), Color(hex: "1E150D")]
         ),
         FreeReadStory(
             id: "history-patterns",
@@ -289,7 +289,7 @@ struct FreeReadFeedItem {
             category: .history,
             source: "ReadToUnlock Editorial",
             symbol: "building.columns.fill",
-            palette: [Color(hex: "33457E"), Color(hex: "1D2F61"), Color(hex: "101F44")]
+            palette: [Color(hex: "5C3A22"), Color(hex: "3E2718"), Color(hex: "1F140C")]
         ),
         FreeReadStory(
             id: "read-like-builder",
@@ -305,7 +305,7 @@ struct FreeReadFeedItem {
             category: .technology,
             source: "ReadToUnlock Editorial",
             symbol: "hammer.fill",
-            palette: [Color(hex: "2B4479"), Color(hex: "19305F"), Color(hex: "0D1E43")]
+            palette: [Color(hex: "4A361F"), Color(hex: "332515"), Color(hex: "1A130A")]
         ),
         FreeReadStory(
             id: "context-switching",
@@ -321,7 +321,7 @@ struct FreeReadFeedItem {
             category: .science,
             source: "ReadToUnlock Editorial",
             symbol: "arrow.left.arrow.right.square.fill",
-            palette: [Color(hex: "304C86"), Color(hex: "1D3668"), Color(hex: "0F2246")]
+            palette: [Color(hex: "58371F"), Color(hex: "3D2615"), Color(hex: "1E130A")]
         ),
         FreeReadStory(
             id: "math-of-weeks",
@@ -337,7 +337,7 @@ struct FreeReadFeedItem {
             category: .mathematics,
             source: "ReadToUnlock Editorial",
             symbol: "function",
-            palette: [Color(hex: "36549A"), Color(hex: "203A71"), Color(hex: "11244A")]
+            palette: [Color(hex: "5E3F22"), Color(hex: "402C17"), Color(hex: "20160B")]
         ),
         FreeReadStory(
             id: "quality-inputs",
@@ -353,7 +353,7 @@ struct FreeReadFeedItem {
             category: .literature,
             source: "ReadToUnlock Editorial",
             symbol: "text.book.closed.fill",
-            palette: [Color(hex: "324B84"), Color(hex: "1C335F"), Color(hex: "0E2044")]
+            palette: [Color(hex: "4F3424"), Color(hex: "372518"), Color(hex: "1B130C")]
         ),
         FreeReadStory(
             id: "one-question",
@@ -369,7 +369,7 @@ struct FreeReadFeedItem {
             category: .technology,
             source: "ReadToUnlock Editorial",
             symbol: "app.badge.checkmark",
-            palette: [Color(hex: "2C4275"), Color(hex: "182B57"), Color(hex: "0D1A3B")]
+            palette: [Color(hex: "4A361F"), Color(hex: "332515"), Color(hex: "1A130A")]
         ),
         FreeReadStory(
             id: "long-view",
@@ -385,7 +385,7 @@ struct FreeReadFeedItem {
             category: .philosophy,
             source: "ReadToUnlock Editorial",
             symbol: "hourglass.bottomhalf.filled",
-            palette: [Color(hex: "30467D"), Color(hex: "1A2F5A"), Color(hex: "0D1C40")]
+            palette: [Color(hex: "4D3B24"), Color(hex: "35291A"), Color(hex: "1A150D")]
         ),
     ]
 }
@@ -707,12 +707,12 @@ struct HomeView: View {
     @AppStorage("personalizationPrompt") private var personalizationPrompt = ""
 
     private let discoverTopics: [(icon: String, title: String, color: Color, category: PassageCategory)] = [
-        ("person.crop.circle.badge.checkmark", "Self-Growth", Color(hex: "8DC4FF"), .psychology),
-        ("bubble.left.and.text.bubble.right", "Communication", Color(hex: "9FD9FF"), .philosophy),
-        ("briefcase", "Career & Business", Color(hex: "7AB2F5"), .economics),
-        ("book.closed", "Fiction", Color(hex: "A5BCFF"), .literature),
-        ("banknote", "Finance & Economics", Color(hex: "6DA2F2"), .economics),
-        ("heart", "Relationships", Color(hex: "91CCFF"), .psychology),
+        ("person.crop.circle.badge.checkmark", "Self-Growth", Color(hex: "EDBE53"), .psychology),
+        ("bubble.left.and.text.bubble.right", "Communication", Color(hex: "D4A853"), .philosophy),
+        ("briefcase", "Career & Business", Color(hex: "C48B5C"), .economics),
+        ("book.closed", "Fiction", Color(hex: "B8A472"), .literature),
+        ("banknote", "Finance & Economics", Color(hex: "C9A65A"), .economics),
+        ("heart", "Relationships", Color(hex: "C49670"), .psychology),
     ]
 
     private let moodPrompts: [(title: String, subtitle: String)] = [
@@ -1011,7 +1011,7 @@ struct CreateLessonPromptCard: View {
             .padding(16)
             .background(
                 LinearGradient(
-                    colors: [Color(hex: "1B2C57"), Color(hex: "152447"), Color(hex: "0D1733")],
+                    colors: [Color(hex: "3D2615"), Color(hex: "2A1B10"), Color(hex: "1A130A")],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
@@ -1134,7 +1134,7 @@ struct PersonalizationPlanView: View {
             planCount: 12,
             categories: [.economics, .technology, .history],
             symbol: "person.crop.square.filled.and.at.rectangle",
-            colors: [Color(hex: "30464F"), Color(hex: "6C5F46"), Color(hex: "1A1F1A")]
+            colors: [Color(hex: "58371F"), Color(hex: "6B4D2E"), Color(hex: "1A130A")]
         ),
         PersonalizationPlan(
             id: "finance",
@@ -1142,7 +1142,7 @@ struct PersonalizationPlanView: View {
             planCount: 6,
             categories: [.economics, .mathematics],
             symbol: "banknote.fill",
-            colors: [Color(hex: "1E2C33"), Color(hex: "3B2A1D"), Color(hex: "141A18")]
+            colors: [Color(hex: "3D2615"), Color(hex: "5C3A22"), Color(hex: "1E130A")]
         ),
         PersonalizationPlan(
             id: "philosophy-history",
@@ -1150,7 +1150,7 @@ struct PersonalizationPlanView: View {
             planCount: 9,
             categories: [.philosophy, .history, .literature],
             symbol: "building.columns.fill",
-            colors: [Color(hex: "26333A"), Color(hex: "5C5642"), Color(hex: "171A16")]
+            colors: [Color(hex: "4D3B24"), Color(hex: "6B5838"), Color(hex: "1A150D")]
         ),
         PersonalizationPlan(
             id: "productivity",
@@ -1158,7 +1158,7 @@ struct PersonalizationPlanView: View {
             planCount: 7,
             categories: [.psychology, .technology, .science],
             symbol: "clock.fill",
-            colors: [Color(hex: "2C3E4A"), Color(hex: "6A6046"), Color(hex: "191D18")]
+            colors: [Color(hex: "53381E"), Color(hex: "6A4F30"), Color(hex: "1D140A")]
         ),
         PersonalizationPlan(
             id: "relationships",
@@ -1166,7 +1166,7 @@ struct PersonalizationPlanView: View {
             planCount: 8,
             categories: [.psychology, .literature],
             symbol: "person.2.fill",
-            colors: [Color(hex: "2E414B"), Color(hex: "5E6D76"), Color(hex: "1A1C1A")]
+            colors: [Color(hex: "5A3D28"), Color(hex: "72563A"), Color(hex: "1E150D")]
         ),
         PersonalizationPlan(
             id: "social-skills",
@@ -1174,7 +1174,7 @@ struct PersonalizationPlanView: View {
             planCount: 14,
             categories: [.psychology, .philosophy],
             symbol: "person.3.fill",
-            colors: [Color(hex: "21303A"), Color(hex: "544B39"), Color(hex: "181B17")]
+            colors: [Color(hex: "4A361F"), Color(hex: "5E4530"), Color(hex: "1A130A")]
         ),
     ]
 
@@ -1184,7 +1184,7 @@ struct PersonalizationPlanView: View {
     var body: some View {
         ZStack {
             LinearGradient(
-                colors: [DS.bg, Color(hex: "0D100D"), Color(hex: "080907")],
+                colors: [DS.bg, Color(hex: "100C08"), Color(hex: "0C0907")],
                 startPoint: .top,
                 endPoint: .bottom
             )
@@ -1238,7 +1238,7 @@ struct PersonalizationPlanView: View {
                             .foregroundStyle(.black)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
-                            .background(Color(hex: "EAE3D8"))
+                            .background(Color(hex: "EDBE53"))
                             .clipShape(Capsule())
                         }
                         .buttonStyle(.plain)
@@ -1356,7 +1356,7 @@ struct PersonalizationPlanView: View {
         .padding(.vertical, 10)
         .background(
             LinearGradient(
-                colors: [Color(hex: "89A9E5"), Color(hex: "A3C8FF"), Color(hex: "6E8FCF")],
+                colors: [Color(hex: "EDBE53"), Color(hex: "D4A853"), Color(hex: "C99A2E")],
                 startPoint: .leading,
                 endPoint: .trailing
             )
@@ -1647,7 +1647,7 @@ struct ScreenTimeSetupStrip: View {
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(.black)
                     .frame(width: 28, height: 28)
-                    .background(.orange)
+                    .background(DS.warning)
                     .clipShape(Circle())
 
                 VStack(alignment: .leading, spacing: 1) {
@@ -1686,12 +1686,12 @@ struct ScreenTimeActiveCard: View {
         Button(action: onTap) {
             HStack(spacing: 12) {
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.green.opacity(0.15))
+                    .fill(DS.success.opacity(0.15))
                     .frame(width: 44, height: 44)
                     .overlay(
                         Image(systemName: "checkmark.shield.fill")
                             .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(.green)
+                            .foregroundStyle(DS.success)
                     )
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -1779,10 +1779,10 @@ struct BlockedAppRow: View {
                 Text(app.isLocked ? "LOCKED" : "OPEN")
                     .font(.system(size: 11, weight: .bold))
                     .tracking(0.3)
-                    .foregroundStyle(app.isLocked ? .red : .green)
+                    .foregroundStyle(app.isLocked ? .red : DS.success)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
-                    .background(app.isLocked ? Color.red.opacity(0.12) : Color.green.opacity(0.12))
+                    .background(app.isLocked ? Color.red.opacity(0.12) : DS.success.opacity(0.12))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
             }
             .padding(14)

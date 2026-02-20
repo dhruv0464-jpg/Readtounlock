@@ -104,7 +104,7 @@ struct LibraryView: View {
                             Text("Pro unlocked: full passage library")
                                 .font(.system(size: 12, weight: .semibold))
                         }
-                        .foregroundStyle(.green)
+                        .foregroundStyle(DS.success)
                         .padding(.bottom, 14)
                     }
                     

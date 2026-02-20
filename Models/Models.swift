@@ -28,14 +28,14 @@ enum PassageCategory: String, Codable, CaseIterable {
     
     var color: Color {
         switch self {
-        case .science: return Color(hex: "74C8FF")
-        case .history: return Color(hex: "9AB8FF")
-        case .philosophy: return Color(hex: "8FD2F5")
-        case .economics: return Color(hex: "7AB8FF")
-        case .psychology: return Color(hex: "A5BEFF")
-        case .literature: return Color(hex: "89B0F0")
-        case .mathematics: return Color(hex: "8FDFFF")
-        case .technology: return Color(hex: "6DA2F2")
+        case .science: return Color(hex: "E8C04E")
+        case .history: return Color(hex: "D4A44A")
+        case .philosophy: return Color(hex: "C9B060")
+        case .economics: return Color(hex: "EDBE53")
+        case .psychology: return Color(hex: "DBA84E")
+        case .literature: return Color(hex: "C9A04A")
+        case .mathematics: return Color(hex: "E0C258")
+        case .technology: return Color(hex: "BDA048")
         }
     }
     
@@ -60,9 +60,9 @@ enum Difficulty: String, Codable, CaseIterable {
     
     var color: Color {
         switch self {
-        case .easy: return .green
-        case .medium: return .orange
-        case .hard: return .red
+        case .easy: return Color(hex: "D4B86A")
+        case .medium: return Color(hex: "C9A65A")
+        case .hard: return Color(hex: "C48B5C")
         }
     }
 }
@@ -94,8 +94,8 @@ struct BlockedApp: Identifiable {
     
     var barColor: Color {
         if isLocked { return .red }
-        if usagePercent > 0.7 { return .orange }
-        return .green
+        if usagePercent > 0.7 { return Color(hex: "C9A65A") }
+        return Color(hex: "D4B86A")
     }
 }
 
