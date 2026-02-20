@@ -16,6 +16,40 @@ struct Passage: Identifiable, Codable {
     var readTimeLabel: String { "\(readTimeMinutes) min" }
 }
 
+struct FreeReadStory {
+    let id: String
+    let title: String
+    let quote: String
+    let body: String
+    let category: PassageCategory
+    let source: String
+    let symbol: String
+    let palette: [Color]
+    let sourceURL: String?
+
+    init(
+        id: String,
+        title: String,
+        quote: String,
+        body: String,
+        category: PassageCategory,
+        source: String,
+        symbol: String,
+        palette: [Color],
+        sourceURL: String? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.quote = quote
+        self.body = body
+        self.category = category
+        self.source = source
+        self.symbol = symbol
+        self.palette = palette
+        self.sourceURL = sourceURL
+    }
+}
+
 enum PassageCategory: String, Codable, CaseIterable {
     case science = "Science"
     case history = "History"

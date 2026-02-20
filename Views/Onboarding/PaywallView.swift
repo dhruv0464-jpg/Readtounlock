@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PaywallView: View {
     @EnvironmentObject var appState: AppState
+    @State private var restoreMessage: String?
 
     let perks: [(icon: String, title: String)] = [
         ("sparkles", "Unlimited unlocks per day"),
@@ -107,7 +108,9 @@ struct PaywallView: View {
 
                         trustRow
 
-                        Button("Restore Purchases") {}
+                        Button("Restore Purchases") {
+                            restorePurchases()
+                        }
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(DS.label3)
                             .padding(.top, 14)
@@ -115,6 +118,16 @@ struct PaywallView: View {
                     }
                 }
             }
+        }
+        .alert("Restore Purchases", isPresented: Binding(
+            get: { restoreMessage != nil },
+            set: { showing in
+                if !showing { restoreMessage = nil }
+            }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(restoreMessage ?? "")
         }
         .onAppear {
             appState.refreshDailyUnlockCreditsIfNeeded()
@@ -259,6 +272,16 @@ struct PaywallView: View {
         }
         .font(.system(size: 11, weight: .semibold))
         .foregroundStyle(DS.label4)
+    }
+
+    private func restorePurchases() {
+        if appState.isPremiumUser {
+            restoreMessage = "Your Pro access is already active."
+            return
+        }
+
+        // POC behavior until StoreKit is integrated.
+        restoreMessage = "No previous purchases were found for this test build."
     }
 }
 

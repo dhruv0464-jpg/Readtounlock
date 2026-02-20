@@ -109,6 +109,12 @@ struct SettingsView: View {
     @EnvironmentObject var mgr: ReadingManager
     @EnvironmentObject var screenTime: ScreenTimeManager
     @State private var showScreenTimeSetup = false
+    @State private var showDailyGoalEditor = false
+    @State private var draftDailyGoal = 3
+    @State private var showDifficultyPicker = false
+    @State private var showAccountSheet = false
+    @State private var showHelpSheet = false
+    @State private var showMembershipAlert = false
     
     var body: some View {
         NavigationStack {
@@ -120,8 +126,21 @@ struct SettingsView: View {
                     
                     // Reading section
                     GroupedSection(label: "Reading") {
-                        NavRow(icon: "📚", title: "Daily Goal", value: "\(appState.dailyGoal) readings")
-                        NavRow(icon: "🎯", title: "Difficulty", value: appState.difficultyLevel)
+                        NavRow(
+                            icon: "📚",
+                            title: "Daily Goal",
+                            value: "\(appState.dailyGoal) readings",
+                            action: {
+                                draftDailyGoal = appState.dailyGoal
+                                showDailyGoalEditor = true
+                            }
+                        )
+                        NavRow(
+                            icon: "🎯",
+                            title: "Difficulty",
+                            value: appState.difficultyLevel,
+                            action: { showDifficultyPicker = true }
+                        )
                         ToggleRow(icon: "🔒", title: "Strict Mode", isOn: $appState.strictMode, isLast: true)
                     }
                     
@@ -163,14 +182,16 @@ struct SettingsView: View {
                             icon: "🛡️",
                             title: "Authorization",
                             value: screenTime.isAuthorized ? "Granted" : "Not Granted",
-                            valueColor: screenTime.isAuthorized ? DS.success : DS.warning
+                            valueColor: screenTime.isAuthorized ? DS.success : DS.warning,
+                            action: { showScreenTimeSetup = true }
                         )
                         NavRow(
                             icon: "📱",
                             title: "Protected Selection",
                             value: "\(screenTime.selectedItemsCount) items",
                             valueColor: screenTime.selectedItemsCount > 0 ? DS.success : DS.label4,
-                            isLast: true
+                            isLast: true,
+                            action: { showScreenTimeSetup = true }
                         )
                     }
 
@@ -189,14 +210,25 @@ struct SettingsView: View {
                     
                     // Account
                     GroupedSection(label: "Account") {
-                        NavRow(icon: "👤", title: "Manage Account")
+                        NavRow(icon: "👤", title: "Manage Account", action: {
+                            showAccountSheet = true
+                        })
                         NavRow(
                             icon: "⭐",
                             title: appState.isPremiumUser ? "Pro Membership" : "Upgrade to Pro",
                             value: appState.isPremiumUser ? "Active" : nil,
-                            valueColor: appState.isPremiumUser ? DS.success : DS.accent
+                            valueColor: appState.isPremiumUser ? DS.success : DS.accent,
+                            action: {
+                                if appState.isPremiumUser {
+                                    showMembershipAlert = true
+                                } else {
+                                    appState.presentPaywall(from: .settings)
+                                }
+                            }
                         )
-                        NavRow(icon: "❓", title: "Help & Support", isLast: true)
+                        NavRow(icon: "❓", title: "Help & Support", isLast: true, action: {
+                            showHelpSheet = true
+                        })
                     }
                     
                     // Footer
@@ -220,6 +252,97 @@ struct SettingsView: View {
         .sheet(isPresented: $showScreenTimeSetup) {
             ScreenTimeSetupView()
                 .environmentObject(screenTime)
+        }
+        .sheet(isPresented: $showDailyGoalEditor) {
+            NavigationStack {
+                Form {
+                    Stepper(value: $draftDailyGoal, in: 1...12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Daily Goal")
+                                .font(.system(size: 15, weight: .semibold))
+                            Text("\(draftDailyGoal) readings per day")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .navigationTitle("Daily Goal")
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Cancel") {
+                            showDailyGoalEditor = false
+                        }
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Save") {
+                            appState.dailyGoal = draftDailyGoal
+                            showDailyGoalEditor = false
+                        }
+                    }
+                }
+            }
+        }
+        .confirmationDialog("Select Difficulty", isPresented: $showDifficultyPicker, titleVisibility: .visible) {
+            ForEach(["Easy", "Medium", "Hard"], id: \.self) { level in
+                Button(level) {
+                    appState.difficultyLevel = level
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        .sheet(isPresented: $showAccountSheet) {
+            NavigationStack {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Account")
+                        .font(.system(size: 28, weight: .bold, design: .serif))
+                    Text("Name: \(appState.userName.isEmpty ? "Reader" : appState.userName)")
+                    Text("Plan: \(appState.isPremiumUser ? "Pro" : "Free")")
+                    Text("Daily goal: \(appState.dailyGoal) readings")
+                    Text("Notifications: \(appState.notificationsEnabled ? "On" : "Off")")
+                    Spacer()
+                }
+                .padding(20)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .background(DS.bg)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Done") {
+                            showAccountSheet = false
+                        }
+                    }
+                }
+            }
+            .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showHelpSheet) {
+            NavigationStack {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("Help & Support")
+                        .font(.system(size: 28, weight: .bold, design: .serif))
+                    Text("Need help with screen-time setup, unlock flow, or subscriptions?")
+                        .foregroundStyle(DS.label3)
+                    Link("Email Support", destination: URL(string: "mailto:support@readtounlock.app")!)
+                    Link("Open Project Gutenberg", destination: URL(string: "https://www.gutenberg.org/")!)
+                    Link("Open Gutendex API", destination: URL(string: "https://gutendex.com/")!)
+                    Spacer()
+                }
+                .padding(20)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .background(DS.bg)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Done") {
+                            showHelpSheet = false
+                        }
+                    }
+                }
+            }
+            .presentationDetents([.medium, .large])
+        }
+        .alert("Pro Membership", isPresented: $showMembershipAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Your Pro membership is active in this prototype build.")
         }
     }
 }

@@ -109,8 +109,22 @@ struct NavRow: View {
     var value: String? = nil
     var valueColor: Color = DS.label4
     var isLast: Bool = false
+    var action: (() -> Void)? = nil
     
     var body: some View {
+        Group {
+            if let action {
+                Button(action: action) {
+                    rowContent
+                }
+                .buttonStyle(.plain)
+            } else {
+                rowContent
+            }
+        }
+    }
+
+    private var rowContent: some View {
         HStack {
             Text(icon)
                 .font(.system(size: 18))

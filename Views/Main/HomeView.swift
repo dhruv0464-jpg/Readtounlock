@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 // MARK: - Main Tab View
@@ -46,27 +47,19 @@ struct MainTabView: View {
     }
 }
 
-struct FreeReadStory {
-    let id: String
-    let title: String
-    let quote: String
-    let body: String
-    let category: PassageCategory
-    let source: String
-    let symbol: String
-    let palette: [Color]
-}
-
-struct FreeReadFeedItem {
+struct FreeReadFeedItem: Identifiable {
     let stableID: String
     let title: String
     let quote: String
     let body: String
     let category: PassageCategory
     let source: String
+    let sourceURL: URL?
     let symbol: String
     let palette: [Color]
     let sequenceLabel: String
+
+    var id: String { stableID }
 
     var visualSeed: Int {
         FreeReadFeedItem.deterministicSeed(stableID)
@@ -78,7 +71,44 @@ struct FreeReadFeedItem {
 
     var shareText: String {
         let preview = body.count > 320 ? "\(body.prefix(320))..." : body
-        return "\"\(quote)\"\n\n\(preview)\n\n\(source)\nShared from Readtounlock"
+        var parts = ["\"\(quote)\"", preview, source]
+        if let sourceURL {
+            parts.append(sourceURL.absoluteString)
+        }
+        parts.append("Shared from Readtounlock")
+        return parts.joined(separator: "\n\n")
+    }
+
+    var keyPassage: String {
+        FreeReadFeedItem.compactPassage(from: body, maxChars: 620)
+    }
+
+    init(stableID: String, title: String, quote: String, body: String, category: PassageCategory, source: String, sourceURL: URL? = nil, symbol: String, palette: [Color], sequenceLabel: String) {
+        self.stableID = stableID
+        self.title = title
+        self.quote = quote
+        self.body = body
+        self.category = category
+        self.source = source
+        self.sourceURL = sourceURL
+        self.symbol = symbol
+        self.palette = palette
+        self.sequenceLabel = sequenceLabel
+    }
+
+    init(story: FreeReadStory, sequenceLabel: String) {
+        self.init(
+            stableID: story.id,
+            title: story.title,
+            quote: story.quote,
+            body: story.body,
+            category: story.category,
+            source: story.source,
+            sourceURL: story.sourceURL.flatMap(URL.init(string:)),
+            symbol: story.symbol,
+            palette: story.palette,
+            sequenceLabel: sequenceLabel
+        )
     }
 
     static let seedPool: [FreeReadFeedItem] = buildSeedPool()
@@ -166,19 +196,70 @@ struct FreeReadFeedItem {
         let sentences = flattened
             .split(whereSeparator: { ".!?".contains($0) })
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { $0.count > 35 }
+            .filter { $0.count > 25 }
 
-        if let first = sentences.first {
-            return first.count > 118 ? "\(first.prefix(118))..." : first
+        let ideal = sentences
+            .filter { $0.count >= 45 && $0.count <= 180 }
+            .min(by: { abs($0.count - 96) < abs($1.count - 96) })
+
+        if let ideal {
+            return finalizedQuoteSentence(ideal)
         }
 
-        return flattened.count > 118 ? "\(flattened.prefix(118))..." : flattened
+        if let first = sentences.first {
+            return finalizedQuoteSentence(first)
+        }
+
+        return flattened
+    }
+
+    private static func finalizedQuoteSentence(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let last = trimmed.last else { return trimmed }
+        if ".!?".contains(last) {
+            return trimmed
+        }
+        return trimmed + "."
     }
 
     private static func deterministicSeed(_ value: String) -> Int {
         value.unicodeScalars.reduce(0) { current, scalar in
             (current * 33 + Int(scalar.value)) % 10_000
         }
+    }
+
+    private static func compactPassage(from text: String, maxChars: Int) -> String {
+        let normalized = text
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let sentences = normalized
+            .split(whereSeparator: { ".!?".contains($0) })
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { $0.count >= 35 }
+
+        guard !sentences.isEmpty else {
+            if normalized.count <= maxChars { return normalized }
+            return String(normalized.prefix(maxChars)).trimmingCharacters(in: .whitespacesAndNewlines) + "..."
+        }
+
+        var selected: [String] = []
+        var total = 0
+        for sentence in sentences {
+            let candidate = sentence + "."
+            let nextTotal = total + candidate.count + (selected.isEmpty ? 0 : 1)
+            if nextTotal > maxChars { break }
+            selected.append(candidate)
+            total = nextTotal
+            if selected.count >= 4 { break }
+        }
+
+        if selected.isEmpty {
+            return String(sentences[0].prefix(maxChars)).trimmingCharacters(in: .whitespacesAndNewlines) + "..."
+        }
+
+        return selected.joined(separator: " ")
     }
 
     private static func palette(for category: PassageCategory) -> [Color] {
@@ -404,6 +485,8 @@ struct FreeReadView: View {
     @State private var seedPool: [FreeReadFeedItem] = []
     @State private var seedCursor: Int = 0
     @State private var likedStoryIDs: Set<String> = Set(UserDefaults.standard.array(forKey: "freeReadLikedStoryIDs") as? [String] ?? [])
+    @State private var selectedStory: FreeReadFeedItem?
+    @State private var didAttemptRemoteLoad = false
 
     var body: some View {
         GeometryReader { geo in
@@ -413,7 +496,8 @@ struct FreeReadView: View {
                         FreeReadCard(
                             item: item.content,
                             isLiked: likedStoryIDs.contains(item.content.stableID),
-                            onLike: { toggleLike(for: item.content) }
+                            onLike: { toggleLike(for: item.content) },
+                            onOpen: { selectedStory = item.content }
                         )
                         .frame(width: geo.size.width, height: geo.size.height)
                         .onAppear {
@@ -432,6 +516,19 @@ struct FreeReadView: View {
         .background(DS.bg)
         .onAppear {
             bootFeedIfNeeded()
+            if !didAttemptRemoteLoad {
+                didAttemptRemoteLoad = true
+                Task {
+                    await refreshFeedFromBooksAPI()
+                }
+            }
+        }
+        .sheet(item: $selectedStory) { story in
+            FreeReadDetailView(
+                item: story,
+                isLiked: likedStoryIDs.contains(story.stableID),
+                onLike: { toggleLike(for: story) }
+            )
         }
     }
 
@@ -443,8 +540,8 @@ struct FreeReadView: View {
     }
 
     private func appendBatch() {
-        guard !FreeReadFeedItem.seedPool.isEmpty else { return }
         if seedPool.isEmpty { seedPool = FreeReadFeedItem.seedPool.shuffled() }
+        guard !seedPool.isEmpty else { return }
 
         var newItems: [FreeReadRenderItem] = []
         newItems.reserveCapacity(batchSize)
@@ -469,19 +566,58 @@ struct FreeReadView: View {
         }
         UserDefaults.standard.set(Array(likedStoryIDs), forKey: likesStorageKey)
     }
+
+    private func refreshFeedFromBooksAPI() async {
+        let stories = await GutendexService.shared.fetchStories(limit: 40)
+
+        await MainActor.run {
+            guard !stories.isEmpty else { return }
+
+            var remoteItems = stories.enumerated().map { index, story in
+                FreeReadFeedItem(story: story, sequenceLabel: "Book \(index + 1)")
+            }
+
+            if remoteItems.count < 40 {
+                let fallback = FreeReadFeedItem.seedPool.shuffled()
+                remoteItems.append(contentsOf: fallback.prefix(40 - remoteItems.count))
+            }
+
+            seedPool = remoteItems.shuffled()
+            seedCursor = 0
+            feed.removeAll()
+            appendBatch()
+            appendBatch()
+        }
+    }
 }
 
 struct FreeReadCard: View {
     let item: FreeReadFeedItem
     let isLiked: Bool
     let onLike: () -> Void
+    let onOpen: () -> Void
 
     private var likeCount: Int { item.baseLikeCount + (isLiked ? 1 : 0) }
+    private var quoteFontSize: CGFloat {
+        let length = item.quote.count
+        if length <= 70 { return 44 }
+        if length <= 110 { return 40 }
+        if length <= 150 { return 35 }
+        return 31
+    }
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             backgroundLayer
                 .ignoresSafeArea()
+                .onTapGesture {
+                    onOpen()
+                }
+                .simultaneousGesture(
+                    TapGesture(count: 2).onEnded {
+                        onLike()
+                    }
+                )
 
             contentOverlay
                 .padding(.leading, 20)
@@ -505,7 +641,6 @@ struct FreeReadCard: View {
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
-        .overlay(StarFieldOverlay(seed: item.visualSeed, starCount: 30))
         .overlay(
             LinearGradient(
                 colors: [Color.black.opacity(0.15), Color.black.opacity(0.0), Color.black.opacity(0.34)],
@@ -517,8 +652,6 @@ struct FreeReadCard: View {
 
     private var contentOverlay: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Spacer()
-
             HStack(spacing: 8) {
                 Text(item.category.rawValue.uppercased())
                     .font(.system(size: 11, weight: .black))
@@ -533,89 +666,56 @@ struct FreeReadCard: View {
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(DS.label4)
             }
-            .padding(.bottom, 10)
+            .padding(.top, 18)
+            .padding(.bottom, 12)
 
-            coverArt
-                .padding(.bottom, 12)
+            Text(item.title)
+                .font(.system(size: 34, weight: .bold, design: .serif))
+                .tracking(-0.5)
+                .foregroundStyle(.white)
+                .lineLimit(2)
+                .padding(.bottom, 14)
 
             Text("\"\(item.quote)\"")
-                .font(.system(size: 25, weight: .bold, design: .serif))
+                .font(.system(size: quoteFontSize, weight: .bold, design: .serif))
                 .tracking(-0.4)
-                .lineLimit(3)
+                .lineSpacing(4)
                 .foregroundStyle(.white)
-                .padding(.bottom, 8)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 16)
 
-            Text(item.body)
-                .font(.system(size: 16, weight: .medium))
-                .lineSpacing(6)
+            Text(item.keyPassage)
+                .font(.system(size: 24, weight: .medium, design: .serif))
+                .lineSpacing(9)
                 .foregroundStyle(DS.label2)
-                .lineLimit(11)
-                .padding(.bottom, 8)
+                .padding(.bottom, 16)
+
+            Spacer(minLength: 8)
 
             Text(item.source)
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(DS.label4)
                 .lineLimit(1)
-                .padding(.bottom, 8)
+                .padding(.bottom, 6)
 
             HStack(spacing: 5) {
                 Image(systemName: "arrow.up")
                     .font(.system(size: 10, weight: .bold))
-                Text("Swipe for next story")
+                Text("Swipe for next")
                     .font(.system(size: 11, weight: .semibold))
             }
             .foregroundStyle(DS.label4)
-        }
-    }
+            .padding(.bottom, 4)
 
-    private var coverArt: some View {
-        ZStack(alignment: .bottomLeading) {
-            RoundedRectangle(cornerRadius: 22)
-                .fill(
-                    LinearGradient(
-                        colors: item.palette,
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-
-            StarFieldOverlay(seed: item.visualSeed + 901, starCount: 18)
-                .clipShape(RoundedRectangle(cornerRadius: 22))
-                .opacity(0.8)
-
-            Image(systemName: item.symbol)
-                .font(.system(size: 86, weight: .medium))
-                .foregroundStyle(.white.opacity(0.2))
-                .offset(x: 48, y: 12)
-
-            Rectangle()
-                .fill(
-                    LinearGradient(
-                        colors: [Color.black.opacity(0.0), Color.black.opacity(0.62)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Night Read")
-                    .font(.system(size: 11, weight: .black))
-                    .tracking(0.8)
-                    .foregroundStyle(DS.accent)
-                Text(item.title)
-                    .font(.system(size: 24, weight: .bold, design: .serif))
-                    .tracking(-0.4)
-                    .foregroundStyle(.white)
-                    .lineLimit(2)
+            HStack(spacing: 5) {
+                Image(systemName: "hand.tap.fill")
+                    .font(.system(size: 10, weight: .bold))
+                Text("Tap to expand · Double tap to like")
+                    .font(.system(size: 11, weight: .semibold))
             }
-            .padding(14)
+            .foregroundStyle(DS.label4)
+            .padding(.bottom, 8)
         }
-        .frame(height: 220)
-        .clipShape(RoundedRectangle(cornerRadius: 22))
-        .overlay(
-            RoundedRectangle(cornerRadius: 22)
-                .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
-        )
     }
 
     private var actionRail: some View {
@@ -664,34 +764,106 @@ struct FreeReadCard: View {
     }
 }
 
-struct StarFieldOverlay: View {
-    let seed: Int
-    let starCount: Int
+struct FreeReadDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let item: FreeReadFeedItem
+    let isLiked: Bool
+    let onLike: () -> Void
+    private var quoteFontSize: CGFloat {
+        let length = item.quote.count
+        if length <= 70 { return 48 }
+        if length <= 110 { return 44 }
+        if length <= 150 { return 38 }
+        return 34
+    }
 
     var body: some View {
-        GeometryReader { geo in
-            ZStack {
-                ForEach(0..<starCount, id: \.self) { index in
-                    let xRatio = pseudoRandom(index, salt: 17)
-                    let yRatio = pseudoRandom(index, salt: 41)
-                    let starSize = 1.0 + pseudoRandom(index, salt: 73) * 2.8
-                    let alpha = 0.18 + pseudoRandom(index, salt: 101) * 0.72
+        NavigationStack {
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(item.category.rawValue.uppercased())
+                        .font(.system(size: 11, weight: .black))
+                        .tracking(0.8)
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 4)
+                        .background(item.category.color)
+                        .clipShape(Capsule())
+                        .padding(.bottom, 12)
 
-                    Circle()
-                        .fill(Color.white.opacity(alpha))
-                        .frame(width: starSize, height: starSize)
-                        .position(
-                            x: xRatio * geo.size.width,
-                            y: yRatio * geo.size.height
-                        )
+                    Text(item.title)
+                        .font(.system(size: 40, weight: .bold, design: .serif))
+                        .tracking(-0.5)
+                        .foregroundStyle(.white)
+                        .lineLimit(3)
+                        .padding(.bottom, 14)
+
+                    Text("\"\(item.quote)\"")
+                        .font(.system(size: quoteFontSize, weight: .bold, design: .serif))
+                        .tracking(-0.5)
+                        .lineSpacing(4)
+                        .foregroundStyle(.white)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.bottom, 20)
+
+                    Text(item.body)
+                        .font(.system(size: 26, weight: .medium, design: .serif))
+                        .lineSpacing(11)
+                        .foregroundStyle(DS.label2)
+                        .textSelection(.enabled)
+                        .padding(.bottom, 20)
+
+                    Text(item.source)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(DS.label4)
+                        .padding(.bottom, item.sourceURL == nil ? 30 : 10)
+
+                    if let sourceURL = item.sourceURL {
+                        Link(destination: sourceURL) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "arrow.up.right.square.fill")
+                                    .font(.system(size: 12, weight: .bold))
+                                Text("Open Original Book Source")
+                                    .font(.system(size: 13, weight: .bold))
+                            }
+                            .foregroundStyle(.black)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(DS.accent)
+                            .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.bottom, 26)
+                    }
+                }
+                .padding(.horizontal, 18)
+                .padding(.top, 12)
+                .padding(.bottom, 16)
+            }
+            .background(DS.bg)
+            .navigationTitle("Free Read")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Close") {
+                        dismiss()
+                    }
+                    .foregroundStyle(DS.accent)
+                }
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button(action: onLike) {
+                        Image(systemName: isLiked ? "heart.fill" : "heart")
+                            .foregroundStyle(isLiked ? Color.red : DS.label2)
+                    }
+
+                    ShareLink(item: item.shareText) {
+                        Image(systemName: "paperplane.fill")
+                            .foregroundStyle(DS.label2)
+                    }
                 }
             }
         }
-    }
-
-    private func pseudoRandom(_ index: Int, salt: Int) -> CGFloat {
-        let value = (seed * (index + 11) + salt * 1_187 + index * 373) % 997
-        return CGFloat(value) / 997.0
     }
 }
 
@@ -715,11 +887,11 @@ struct HomeView: View {
         ("heart", "Relationships", Color(hex: "C49670"), .psychology),
     ]
 
-    private let moodPrompts: [(title: String, subtitle: String)] = [
-        ("Taking a late walk", "wanting something reflective"),
-        ("Before a hard conversation", "wanting clear words"),
-        ("When focus feels low", "wanting sharp concentration"),
-        ("After a long day", "wanting calm and reset"),
+    private let moodPrompts: [(title: String, subtitle: String, category: PassageCategory)] = [
+        ("Taking a late walk", "wanting something reflective", .philosophy),
+        ("Before a hard conversation", "wanting clear words", .psychology),
+        ("When focus feels low", "wanting sharp concentration", .science),
+        ("After a long day", "wanting calm and reset", .literature),
     ]
 
     private var preferredCategories: Set<PassageCategory> {
@@ -848,7 +1020,9 @@ struct HomeView: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 10) {
                             ForEach(moodPrompts, id: \.title) { mood in
-                                MoodPromptCard(title: mood.title, subtitle: mood.subtitle)
+                                MoodPromptCard(title: mood.title, subtitle: mood.subtitle) {
+                                    startMoodReading(for: mood.category)
+                                }
                             }
                         }
                     }
@@ -974,6 +1148,17 @@ struct HomeView: View {
             updated.insert(category)
         }
         personalizationCategoryCSV = encodeStoredCategories(updated)
+    }
+
+    private func startMoodReading(for category: PassageCategory) {
+        if let match = personalizedFeed.first(where: { $0.category == category }) {
+            appState.startReading(match)
+            return
+        }
+
+        if let fallback = PassageLibrary.all.first(where: { $0.category == category }) {
+            appState.startReading(fallback)
+        }
     }
 }
 
@@ -1530,28 +1715,34 @@ struct FeaturedLessonCard: View {
 struct MoodPromptCard: View {
     let title: String
     let subtitle: String
+    var onTap: (() -> Void)? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(title)
-                .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(.white)
-                .lineLimit(2)
+        Button {
+            onTap?()
+        } label: {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title)
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
 
-            Text(subtitle)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(DS.label3)
-                .lineLimit(2)
+                Text(subtitle)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(DS.label3)
+                    .lineLimit(2)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(width: 290, alignment: .leading)
+            .background(DS.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 20))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20)
+                    .strokeBorder(DS.separator, lineWidth: 1)
+            )
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .frame(width: 290, alignment: .leading)
-        .background(DS.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 20))
-        .overlay(
-            RoundedRectangle(cornerRadius: 20)
-                .strokeBorder(DS.separator, lineWidth: 1)
-        )
+        .buttonStyle(.plain)
     }
 }
 
@@ -1791,6 +1982,569 @@ struct BlockedAppRow: View {
         }
         .buttonStyle(.plain)
     }
+}
+
+@MainActor
+final class GutendexService {
+    static let shared = GutendexService()
+
+    private let session: URLSession
+    private let cacheKey = "freeRead.cachedStories.v2"
+
+    private init() {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 25
+        config.timeoutIntervalForResource = 40
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        self.session = URLSession(configuration: config)
+    }
+
+    func fetchStories(limit: Int = 40) async -> [FreeReadStory] {
+        let cachedStories = loadCachedStories(limit: limit)
+
+        do {
+            let books = try await fetchCandidateBooks(maxPages: 5, maxBooks: 14)
+
+            var stories: [FreeReadStory] = []
+            await withTaskGroup(of: [FreeReadStory].self) { group in
+                for (index, book) in books.enumerated() {
+                    group.addTask {
+                        await self.extractStories(from: book, order: index, maxPerBook: 4)
+                    }
+                }
+
+                for await bookStories in group {
+                    stories.append(contentsOf: bookStories)
+                }
+            }
+
+            let rankedStories = rankStories(stories, limit: limit)
+            if !rankedStories.isEmpty {
+                saveCachedStories(rankedStories)
+                return rankedStories
+            }
+            return cachedStories
+        } catch {
+            return cachedStories
+        }
+    }
+
+    private func fetchCandidateBooks(maxPages: Int, maxBooks: Int) async throws -> [GutendexBook] {
+        var collected: [GutendexBook] = []
+
+        for page in 1...maxPages {
+            guard let url = URL(string: "https://gutendex.com/books/?languages=en&page=\(page)") else {
+                continue
+            }
+
+            let (data, _) = try await session.data(from: url)
+            let response = try JSONDecoder().decode(GutendexResponse.self, from: data)
+            collected.append(contentsOf: response.results)
+        }
+
+        let filtered = collected.filter { preferredTextURL(for: $0) != nil && isHighSignalBook($0) }
+        var uniqueByID: [Int: GutendexBook] = [:]
+        for book in filtered {
+            uniqueByID[book.id] = book
+        }
+
+        let sorted = uniqueByID.values.sorted { ($0.downloadCount ?? 0) > ($1.downloadCount ?? 0) }
+        return Array(sorted.prefix(maxBooks))
+    }
+
+    private func extractStories(from book: GutendexBook, order: Int, maxPerBook: Int) async -> [FreeReadStory] {
+        guard let textURLString = preferredTextURL(for: book), let textURL = URL(string: textURLString) else {
+            return []
+        }
+
+        do {
+            let (data, _) = try await session.data(from: textURL)
+            guard let rawText = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .ascii) else {
+                return []
+            }
+
+            let cleanedText = stripGutenbergBoilerplate(from: rawText)
+            let sections = extractSections(from: cleanedText, targetCount: maxPerBook)
+            guard !sections.isEmpty else { return [] }
+
+            let author = book.authors.first?.name ?? "Unknown Author"
+            let subjects = book.subjects ?? []
+            let category = inferCategory(from: subjects, title: book.title)
+            let symbol = symbol(for: category, subjects: subjects)
+            let canonicalURL = canonicalBookURL(for: book)
+
+            return sections.enumerated().map { index, section in
+                FreeReadStory(
+                    id: "gut-\(book.id)-\(index)",
+                    title: book.title,
+                    quote: buildQuote(from: section),
+                    body: section,
+                    category: category,
+                    source: "\(book.title) — \(author) (Project Gutenberg via Gutendex)",
+                    symbol: symbol,
+                    palette: palette(for: category, seed: order + index),
+                    sourceURL: canonicalURL
+                )
+            }
+        } catch {
+            return []
+        }
+    }
+
+    private func preferredTextURL(for book: GutendexBook) -> String? {
+        let preferredKeys = [
+            "text/plain; charset=utf-8",
+            "text/plain; charset=us-ascii",
+            "text/plain",
+            "text/plain; charset=iso-8859-1",
+        ]
+
+        for key in preferredKeys {
+            if let url = book.formats[key], !url.contains(".zip") {
+                return url
+            }
+        }
+
+        return nil
+    }
+
+    private func canonicalBookURL(for book: GutendexBook) -> String {
+        if let html = book.formats["text/html"], !html.contains(".zip") {
+            return html
+        }
+        return "https://www.gutenberg.org/ebooks/\(book.id)"
+    }
+
+    private func isHighSignalBook(_ book: GutendexBook) -> Bool {
+        let haystack = ([book.title] + (book.subjects ?? []))
+            .joined(separator: " ")
+            .lowercased()
+
+        let blockedTerms = [
+            "children",
+            "juvenile",
+            "school reader",
+            "catalog",
+            "dictionary",
+            "cookbook",
+            "songbook",
+            "bible",
+            "index of",
+            "advertisement"
+        ]
+        if blockedTerms.contains(where: { haystack.contains($0) }) {
+            return false
+        }
+
+        return true
+    }
+
+    private func stripGutenbergBoilerplate(from text: String) -> String {
+        var working = text.replacingOccurrences(of: "\r\n", with: "\n")
+
+        if let startRange = working.range(
+            of: "*** START OF THE PROJECT GUTENBERG",
+            options: [.caseInsensitive]
+        ) {
+            let tail = working[startRange.upperBound...]
+            if let firstBreak = tail.range(of: "\n") {
+                working = String(tail[firstBreak.upperBound...])
+            } else {
+                working = String(tail)
+            }
+        }
+
+        if let endRange = working.range(
+            of: "*** END OF THE PROJECT GUTENBERG",
+            options: [.caseInsensitive]
+        ) {
+            working = String(working[..<endRange.lowerBound])
+        }
+
+        return working
+    }
+
+    private func extractSections(from text: String, targetCount: Int) -> [String] {
+        let rawParagraphs = text
+            .components(separatedBy: "\n\n")
+            .map { normalizedParagraph($0) }
+            .filter(isValidParagraph)
+
+        guard rawParagraphs.count >= 6 else { return [] }
+
+        let safeTarget = max(1, targetCount)
+        let scoredParagraphs = rawParagraphs.enumerated()
+            .map { (index: $0.offset, text: $0.element, score: scoreParagraphImpact($0.element)) }
+            .sorted { $0.score > $1.score }
+
+        var sections: [String] = []
+        var usedIndices: [Int] = []
+
+        for candidate in scoredParagraphs {
+            if sections.count >= safeTarget { break }
+            if usedIndices.contains(where: { abs($0 - candidate.index) < 3 }) { continue }
+
+            let section = composeSection(from: rawParagraphs, startIndex: candidate.index)
+            guard section.count >= 260 else { continue }
+            guard scoreSectionImpact(section) >= 0.26 else { continue }
+
+            sections.append(section)
+            usedIndices.append(candidate.index)
+        }
+
+        if sections.count < safeTarget {
+            let step = max(1, rawParagraphs.count / (safeTarget + 1))
+            for bucket in 1...safeTarget {
+                let index = min(rawParagraphs.count - 1, bucket * step)
+                if usedIndices.contains(where: { abs($0 - index) < 2 }) { continue }
+                let section = composeSection(from: rawParagraphs, startIndex: index)
+                if section.count >= 240 {
+                    sections.append(section)
+                    usedIndices.append(index)
+                }
+                if sections.count >= safeTarget { break }
+            }
+        }
+
+        return Array(sections.prefix(safeTarget))
+    }
+
+    private func composeSection(from paragraphs: [String], startIndex: Int) -> String {
+        var section = paragraphs[startIndex]
+        var cursor = startIndex + 1
+
+        while section.count < 700 && cursor < paragraphs.count {
+            let next = paragraphs[cursor]
+            if next.count > 180 {
+                section += "\n\n" + next
+            }
+            cursor += 1
+        }
+
+        return trimmedToSentence(section, maxChars: 1150)
+    }
+
+    private func normalizedParagraph(_ paragraph: String) -> String {
+        paragraph
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func isValidParagraph(_ paragraph: String) -> Bool {
+        guard paragraph.count >= 180 && paragraph.count <= 1800 else { return false }
+        guard paragraph.contains(".") || paragraph.contains(";") || paragraph.contains("!") || paragraph.contains("?") else { return false }
+        if appearsToBeHeading(paragraph) { return false }
+
+        let words = paragraph.split(separator: " ")
+        guard words.count >= 30 else { return false }
+
+        let letters = paragraph.filter(\.isLetter)
+        guard !letters.isEmpty else { return false }
+        let uppercaseRatio = Double(paragraph.filter(\.isUppercase).count) / Double(letters.count)
+        if uppercaseRatio >= 0.4 { return false }
+
+        let digitRatio = Double(paragraph.filter(\.isNumber).count) / Double(max(1, paragraph.count))
+        if digitRatio > 0.05 { return false }
+
+        return true
+    }
+
+    private func trimmedToSentence(_ text: String, maxChars: Int) -> String {
+        guard text.count > maxChars else { return text }
+        let prefix = String(text.prefix(maxChars))
+        if let split = prefix.lastIndex(where: { ".!?".contains($0) }) {
+            return String(prefix[...split]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return prefix.trimmingCharacters(in: .whitespacesAndNewlines) + "..."
+    }
+
+    private func buildQuote(from section: String) -> String {
+        let flattened = section.replacingOccurrences(of: "\n", with: " ")
+        let candidates = flattened
+            .split(whereSeparator: { ".!?".contains($0) })
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { $0.count >= 35 }
+
+        if let best = bestQuoteCandidate(from: candidates) {
+            return finalizedQuote(best)
+        }
+
+        return finalizedQuote(flattened)
+    }
+
+    private func bestQuoteCandidate(from candidates: [String]) -> String? {
+        guard !candidates.isEmpty else { return nil }
+
+        let idealRange = candidates.filter { $0.count >= 45 && $0.count <= 185 }
+        if let bestIdeal = idealRange.max(by: { scoreSentenceImpact($0) < scoreSentenceImpact($1) }) {
+            return bestIdeal
+        }
+
+        let fallbackRange = candidates.filter { $0.count >= 25 && $0.count <= 240 }
+        if let bestFallback = fallbackRange.max(by: { scoreSentenceImpact($0) < scoreSentenceImpact($1) }) {
+            return bestFallback
+        }
+
+        return candidates.max(by: { scoreSentenceImpact($0) < scoreSentenceImpact($1) })
+    }
+
+    private func finalizedQuote(_ value: String) -> String {
+        let trimmed = value
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let last = trimmed.last else { return trimmed }
+        if ".!?".contains(last) {
+            return trimmed
+        }
+        return trimmed + "."
+    }
+
+    private func scoreSectionImpact(_ section: String) -> Double {
+        let paragraphs = section.components(separatedBy: "\n\n")
+        guard !paragraphs.isEmpty else { return 0 }
+        let paragraphScores = paragraphs.map(scoreParagraphImpact)
+        let average = paragraphScores.reduce(0, +) / Double(paragraphScores.count)
+        return average + min(0.15, Double(section.count) / 9_000.0)
+    }
+
+    private func scoreParagraphImpact(_ paragraph: String) -> Double {
+        let lowercased = paragraph.lowercased()
+        let words = paragraph.split(separator: " ")
+        let wordCount = words.count
+
+        let impactWords = [
+            "attention", "mind", "time", "habit", "discipline", "freedom", "courage",
+            "character", "purpose", "truth", "wisdom", "power", "virtue", "justice",
+            "love", "fear", "change", "choice", "focus", "judgment", "future"
+        ]
+        let keywordHits = impactWords.filter { lowercased.contains($0) }.count
+
+        var score = 0.0
+        if wordCount >= 45 && wordCount <= 150 { score += 0.28 }
+        if paragraph.contains("?") { score += 0.06 }
+        if paragraph.contains("!") { score += 0.04 }
+        if paragraph.contains(";") || paragraph.contains(":") { score += 0.05 }
+        score += min(0.34, Double(keywordHits) * 0.05)
+
+        if lowercased.contains("chapter") || lowercased.contains("book ") {
+            score -= 0.24
+        }
+
+        if paragraph.contains("  ") {
+            score -= 0.05
+        }
+
+        return max(0, min(1, score))
+    }
+
+    private func scoreSentenceImpact(_ sentence: String) -> Double {
+        let lowercased = sentence.lowercased()
+        let words = sentence.split(separator: " ").count
+        var score = 0.0
+
+        if words >= 8 && words <= 32 { score += 0.24 }
+        if sentence.contains(",") { score += 0.04 }
+        if sentence.contains(";") { score += 0.04 }
+
+        let impactWords = [
+            "mind", "attention", "choice", "time", "habit", "truth", "freedom",
+            "courage", "character", "future", "wisdom", "purpose", "discipline"
+        ]
+        score += min(0.52, Double(impactWords.filter { lowercased.contains($0) }.count) * 0.08)
+
+        if lowercased.contains("chapter") || lowercased.contains("book ") {
+            score -= 0.3
+        }
+
+        return max(0, min(1, score))
+    }
+
+    private func appearsToBeHeading(_ paragraph: String) -> Bool {
+        let trimmed = paragraph.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return true }
+        if trimmed.count < 24 && trimmed.uppercased() == trimmed {
+            return true
+        }
+
+        let lowercased = trimmed.lowercased()
+        let headingPatterns = [
+            "chapter ",
+            "book ",
+            "table of contents",
+            "preface",
+            "contents"
+        ]
+        return headingPatterns.contains(where: { lowercased.hasPrefix($0) })
+    }
+
+    private func rankStories(_ stories: [FreeReadStory], limit: Int) -> [FreeReadStory] {
+        let ranked = stories.sorted {
+            storyScore($0) > storyScore($1)
+        }
+
+        var uniqueStories: [FreeReadStory] = []
+        var seenKeys: Set<String> = []
+
+        for story in ranked {
+            let dedupeKey = "\(story.title.lowercased())|\(story.quote.lowercased().prefix(90))"
+            guard !seenKeys.contains(dedupeKey) else { continue }
+            seenKeys.insert(dedupeKey)
+            uniqueStories.append(story)
+            if uniqueStories.count >= limit { break }
+        }
+
+        return uniqueStories
+    }
+
+    private func storyScore(_ story: FreeReadStory) -> Double {
+        scoreSentenceImpact(story.quote) + (0.5 * scoreSectionImpact(story.body))
+    }
+
+    private func loadCachedStories(limit: Int) -> [FreeReadStory] {
+        guard
+            let data = UserDefaults.standard.data(forKey: cacheKey),
+            let payload = try? JSONDecoder().decode([CachedFreeReadStory].self, from: data)
+        else {
+            return []
+        }
+
+        let stories: [FreeReadStory] = payload.enumerated().compactMap { element in
+            let (index, cached) = element
+            guard let category = PassageCategory(rawValue: cached.category) else { return nil }
+            return FreeReadStory(
+                id: cached.id,
+                title: cached.title,
+                quote: cached.quote,
+                body: cached.body,
+                category: category,
+                source: cached.source,
+                symbol: cached.symbol,
+                palette: palette(for: category, seed: index),
+                sourceURL: cached.sourceURL
+            )
+        }
+
+        return Array(stories.prefix(limit))
+    }
+
+    private func saveCachedStories(_ stories: [FreeReadStory]) {
+        let payload = stories.map {
+            CachedFreeReadStory(
+                id: $0.id,
+                title: $0.title,
+                quote: $0.quote,
+                body: $0.body,
+                category: $0.category.rawValue,
+                source: $0.source,
+                symbol: $0.symbol,
+                sourceURL: $0.sourceURL
+            )
+        }
+
+        guard let data = try? JSONEncoder().encode(payload) else { return }
+        UserDefaults.standard.set(data, forKey: cacheKey)
+    }
+
+    private func inferCategory(from subjects: [String], title: String) -> PassageCategory {
+        let haystack = ([title] + subjects).joined(separator: " ").lowercased()
+
+        let map: [(PassageCategory, [String])] = [
+            (.philosophy, ["philosophy", "ethics", "stoic", "metaphysics", "reason"]),
+            (.science, ["science", "biology", "physics", "chemistry", "natural history"]),
+            (.history, ["history", "war", "roman", "ancient", "revolution", "biography"]),
+            (.economics, ["econom", "money", "trade", "wealth", "capital"]),
+            (.psychology, ["mind", "character", "habit", "moral", "human nature"]),
+            (.literature, ["novel", "poetry", "fiction", "drama", "literature"]),
+            (.mathematics, ["math", "geometry", "number", "algebra"]),
+            (.technology, ["industry", "machine", "technology", "engineering", "invent"]),
+        ]
+
+        for (category, keywords) in map where keywords.contains(where: { haystack.contains($0) }) {
+            return category
+        }
+
+        return .literature
+    }
+
+    private func symbol(for category: PassageCategory, subjects: [String]) -> String {
+        let subjectLine = subjects.joined(separator: " ").lowercased()
+        if subjectLine.contains("women") || subjectLine.contains("love") || subjectLine.contains("marriage") {
+            return "heart.text.square.fill"
+        }
+
+        switch category {
+        case .science: return "atom"
+        case .history: return "clock.arrow.circlepath"
+        case .philosophy: return "brain.head.profile"
+        case .economics: return "banknote.fill"
+        case .psychology: return "person.2.fill"
+        case .literature: return "text.book.closed.fill"
+        case .mathematics: return "function"
+        case .technology: return "cpu.fill"
+        }
+    }
+
+    private func palette(for category: PassageCategory, seed: Int) -> [Color] {
+        let variants: [[Color]]
+        switch category {
+        case .science:
+            variants = [[Color(hex: "2F4E8B"), Color(hex: "1E3466"), Color(hex: "0D1D43")]]
+        case .history:
+            variants = [[Color(hex: "3C4F85"), Color(hex: "24345E"), Color(hex: "111D3E")]]
+        case .philosophy:
+            variants = [[Color(hex: "2C4A7D"), Color(hex: "1B345D"), Color(hex: "0F1E40")]]
+        case .economics:
+            variants = [[Color(hex: "2D4778"), Color(hex: "1A3156"), Color(hex: "0E1B39")]]
+        case .psychology:
+            variants = [[Color(hex: "394D88"), Color(hex: "203462"), Color(hex: "111F43")]]
+        case .literature:
+            variants = [[Color(hex: "334A7F"), Color(hex: "1D335C"), Color(hex: "101F40")]]
+        case .mathematics:
+            variants = [[Color(hex: "315293"), Color(hex: "1D3B72"), Color(hex: "10234A")]]
+        case .technology:
+            variants = [[Color(hex: "294678"), Color(hex: "173159"), Color(hex: "0D1D3F")]]
+        }
+
+        return variants[seed % variants.count]
+    }
+}
+
+private struct GutendexResponse: Decodable {
+    let results: [GutendexBook]
+}
+
+private struct GutendexBook: Decodable {
+    let id: Int
+    let title: String
+    let authors: [GutendexAuthor]
+    let subjects: [String]?
+    let formats: [String: String]
+    let downloadCount: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case authors
+        case subjects
+        case formats
+        case downloadCount = "download_count"
+    }
+}
+
+private struct GutendexAuthor: Decodable {
+    let name: String
+}
+
+private struct CachedFreeReadStory: Codable {
+    let id: String
+    let title: String
+    let quote: String
+    let body: String
+    let category: String
+    let source: String
+    let symbol: String
+    let sourceURL: String?
 }
 
 private func decodeStoredCategories(from rawValue: String) -> Set<PassageCategory> {
