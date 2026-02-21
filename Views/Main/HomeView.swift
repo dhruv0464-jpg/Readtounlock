@@ -477,13 +477,16 @@ struct FreeReadRenderItem: Identifiable {
 }
 
 struct FreeReadView: View {
+    @EnvironmentObject var appState: AppState
     private let likesStorageKey = "freeReadLikedStoryIDs"
     private let batchSize = 24
     private let prefetchThreshold = 8
 
     @State private var feed: [FreeReadRenderItem] = []
+    @State private var masterPool: [FreeReadFeedItem] = []
     @State private var seedPool: [FreeReadFeedItem] = []
     @State private var seedCursor: Int = 0
+    @State private var activeVibeCategory: PassageCategory?
     @State private var likedStoryIDs: Set<String> = Set(UserDefaults.standard.array(forKey: "freeReadLikedStoryIDs") as? [String] ?? [])
     @State private var selectedStory: FreeReadFeedItem?
     @State private var didAttemptRemoteLoad = false
@@ -516,12 +519,18 @@ struct FreeReadView: View {
         .background(DS.bg)
         .onAppear {
             bootFeedIfNeeded()
+            applyPendingVibeIfNeeded()
             if !didAttemptRemoteLoad {
                 didAttemptRemoteLoad = true
                 Task {
                     await refreshFeedFromBooksAPI()
                 }
             }
+        }
+        .onChange(of: appState.freeReadFocusCategory) { _, newValue in
+            guard let category = newValue else { return }
+            applyVibeCategory(category)
+            appState.freeReadFocusCategory = nil
         }
         .sheet(item: $selectedStory) { story in
             FreeReadDetailView(
@@ -534,9 +543,10 @@ struct FreeReadView: View {
 
     private func bootFeedIfNeeded() {
         guard feed.isEmpty else { return }
-        seedPool = FreeReadFeedItem.seedPool.shuffled()
-        appendBatch()
-        appendBatch()
+        if masterPool.isEmpty {
+            masterPool = FreeReadFeedItem.seedPool
+        }
+        rebuildFeed(for: activeVibeCategory)
     }
 
     private func appendBatch() {
@@ -582,12 +592,37 @@ struct FreeReadView: View {
                 remoteItems.append(contentsOf: fallback.prefix(40 - remoteItems.count))
             }
 
-            seedPool = remoteItems.shuffled()
-            seedCursor = 0
-            feed.removeAll()
-            appendBatch()
-            appendBatch()
+            masterPool = remoteItems
+            rebuildFeed(for: activeVibeCategory)
         }
+    }
+
+    private func applyPendingVibeIfNeeded() {
+        guard let pending = appState.freeReadFocusCategory else { return }
+        applyVibeCategory(pending)
+        appState.freeReadFocusCategory = nil
+    }
+
+    private func applyVibeCategory(_ category: PassageCategory) {
+        activeVibeCategory = category
+        rebuildFeed(for: category)
+    }
+
+    private func rebuildFeed(for category: PassageCategory?) {
+        let basePool = masterPool.isEmpty ? FreeReadFeedItem.seedPool : masterPool
+        let filteredPool: [FreeReadFeedItem]
+        if let category {
+            let matches = basePool.filter { $0.category == category }
+            filteredPool = matches.isEmpty ? basePool : matches
+        } else {
+            filteredPool = basePool
+        }
+
+        seedPool = filteredPool.shuffled()
+        seedCursor = 0
+        feed.removeAll()
+        appendBatch()
+        appendBatch()
     }
 }
 
@@ -1052,16 +1087,21 @@ struct HomeView: View {
                     }
                     .padding(.bottom, 22)
 
-                    Text("More creations by community")
+                    Text("Free Read by vibe")
                         .font(.system(size: 36, weight: .bold, design: .serif))
                         .tracking(-0.6)
+                        .padding(.bottom, 4)
+
+                    Text("Pick a vibe and jump into the Free Read feed.")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(DS.label3)
                         .padding(.bottom, 10)
 
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 12) {
                             ForEach(communityPassages) { passage in
                                 FeaturedLessonCard(passage: passage, compact: true) {
-                                    appState.startReading(passage)
+                                    openFreeRead(for: passage.category)
                                 }
                             }
                         }
@@ -1183,6 +1223,11 @@ struct HomeView: View {
         if let fallback = PassageLibrary.all.first(where: { $0.category == category }) {
             appState.startReading(fallback)
         }
+    }
+
+    private func openFreeRead(for category: PassageCategory) {
+        appState.freeReadFocusCategory = category
+        appState.selectedTab = .freeRead
     }
 }
 
@@ -1703,7 +1748,6 @@ struct FeaturedLessonCard: View {
 
     private var cardWidth: CGFloat { compact ? 152 : 182 }
     private var cardHeight: CGFloat { compact ? 194 : 252 }
-    private var sourceCount: Int { 4 + ((passage.id * 7) % 35) }
     private var visualSeed: Int {
         passage.title.unicodeScalars.reduce(passage.id * 31) { current, scalar in
             (current * 33 + Int(scalar.value)) % 10_000
@@ -1722,23 +1766,17 @@ struct FeaturedLessonCard: View {
     }
     private var categoryLabel: String { passage.category.rawValue.uppercased() }
     private var symbolName: String { passage.category.icon }
-    private var sourceGlyphs: [String] {
-        let titleInitials = passage.title
-            .components(separatedBy: CharacterSet.alphanumerics.inverted)
-            .filter { !$0.isEmpty }
-            .prefix(4)
-            .compactMap { $0.first.map { String($0).uppercased() } }
-        if titleInitials.count == 4 { return Array(titleInitials) }
-
-        let sourceInitials = passage.source
-            .components(separatedBy: CharacterSet.alphanumerics.inverted)
-            .filter { !$0.isEmpty }
-            .prefix(4)
-            .compactMap { $0.first.map { String($0).uppercased() } }
-
-        let merged = Array((titleInitials + sourceInitials).prefix(4))
-        if merged.count == 4 { return merged }
-        return ["R", "T", "U", "K"]
+    private var vibeLabel: String {
+        switch passage.category {
+        case .science: return "Curiosity vibe"
+        case .history: return "Long-view vibe"
+        case .philosophy: return "Deep-think vibe"
+        case .economics: return "Decision vibe"
+        case .psychology: return "Calm-focus vibe"
+        case .literature: return "Reflective vibe"
+        case .mathematics: return "Logic vibe"
+        case .technology: return "Builder vibe"
+        }
     }
     private var coverGradient: [Color] {
         switch passage.category {
@@ -1839,28 +1877,25 @@ struct FeaturedLessonCard: View {
 
     private var footerSection: some View {
         HStack(spacing: 8) {
-            HStack(spacing: -5) {
-                ForEach(Array(sourceGlyphs.enumerated()), id: \.offset) { index, glyph in
-                    Circle()
-                        .fill(avatarColor(index))
-                        .frame(width: compact ? 17 : 19, height: compact ? 17 : 19)
-                        .overlay(
-                            Text(glyph)
-                                .font(.system(size: compact ? 8 : 9, weight: .bold))
-                                .foregroundStyle(.black.opacity(0.78))
-                        )
-                        .overlay(
-                            Circle()
-                                .strokeBorder(Color.black.opacity(0.3), lineWidth: 0.5)
-                        )
-                }
+            HStack(spacing: 5) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: compact ? 10 : 11, weight: .bold))
+                Text(vibeLabel)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
             }
+            .font(.system(size: compact ? 11 : 12, weight: .bold))
+            .foregroundStyle(.white.opacity(0.92))
 
-            Text("\(sourceCount) sources")
-                .font(.system(size: compact ? 11 : 12, weight: .bold))
-                .foregroundStyle(.white.opacity(0.92))
+            Spacer(minLength: 6)
 
-            Spacer(minLength: 0)
+            HStack(spacing: 4) {
+                Image(systemName: "clock.fill")
+                    .font(.system(size: compact ? 9 : 10, weight: .bold))
+                Text(passage.readTimeLabel)
+                    .font(.system(size: compact ? 11 : 12, weight: .bold))
+            }
+            .foregroundStyle(.white.opacity(0.88))
         }
         .padding(.horizontal, compact ? 10 : 12)
         .padding(.vertical, compact ? 7 : 8)
@@ -1891,18 +1926,6 @@ struct FeaturedLessonCard: View {
                 .frame(width: compact ? 24 : 32, height: compact ? 24 : 32)
                 .offset(x: compact ? 24 : 30, y: compact ? 18 : 24)
         }
-    }
-
-    private func avatarColor(_ index: Int) -> Color {
-        let colors = [
-            Color(hex: "E8CC7A"),
-            Color(hex: "B0D4A3"),
-            Color(hex: "AFC6E8"),
-            Color(hex: "E8BFA4"),
-            Color(hex: "D3B3E6"),
-        ]
-        let seed = (visualSeed + index * 11) % colors.count
-        return colors[seed]
     }
 }
 

@@ -63,6 +63,7 @@ class AppState: ObservableObject {
 
     @Published var currentScreen: AppScreen = .splash
     @Published var selectedTab: MainTab = .home
+    @Published var freeReadFocusCategory: PassageCategory?
     @Published var onboardingStep: Int = 0
     @Published var selectedPlan: SubscriptionPlan = .yearly
     @Published var paywallEntryPoint: PaywallEntryPoint = .onboarding
