@@ -124,7 +124,7 @@ struct FreeReadFeedItem: Identifiable {
                 source: story.source,
                 symbol: story.symbol,
                 palette: story.palette,
-                sequenceLabel: "Editorial"
+                sequenceLabel: "Impact Read"
             )
         }
 
@@ -139,18 +139,32 @@ struct FreeReadFeedItem: Identifiable {
             let segments = splitIntoSegments(passage.content)
             guard !segments.isEmpty else { continue }
 
-            for (index, segment) in segments.prefix(2).enumerated() {
+            let ranked = segments.enumerated()
+                .map { index, segment in
+                    (
+                        sourceIndex: index,
+                        text: segment,
+                        score: segmentImpactScore(segment, category: passage.category)
+                    )
+                }
+                .sorted { $0.score > $1.score }
+
+            let selected = Array(ranked.filter { $0.score >= 0.22 }.prefix(2))
+            let fallback = Array(ranked.prefix(2))
+            let picked = selected.isEmpty ? fallback : selected
+
+            for (rank, candidate) in picked.enumerated() {
                 items.append(
                     FreeReadFeedItem(
-                        stableID: "library-\(passage.id)-\(index)",
+                        stableID: "library-\(passage.id)-\(candidate.sourceIndex)",
                         title: passage.title,
-                        quote: quoteFromSegment(segment),
-                        body: segment,
+                        quote: quoteFromSegment(candidate.text),
+                        body: candidate.text,
                         category: passage.category,
                         source: "From library: \(passage.source)",
                         symbol: passage.category.icon,
                         palette: palette(for: passage.category),
-                        sequenceLabel: "Library \(index + 1)/\(segments.count)"
+                        sequenceLabel: "Best Passage \(rank + 1)"
                     )
                 )
             }
@@ -200,18 +214,76 @@ struct FreeReadFeedItem: Identifiable {
 
         let ideal = sentences
             .filter { $0.count >= 45 && $0.count <= 180 }
-            .min(by: { abs($0.count - 96) < abs($1.count - 96) })
+            .max(by: { sentenceImpactScore($0) < sentenceImpactScore($1) })
 
         if let ideal {
             return finalizedQuoteSentence(ideal)
         }
 
-        if let first = sentences.first {
-            return finalizedQuoteSentence(first)
+        if let best = sentences.max(by: { sentenceImpactScore($0) < sentenceImpactScore($1) }) {
+            return finalizedQuoteSentence(best)
         }
 
         return flattened
     }
+
+    private static func sentenceImpactScore(_ sentence: String) -> Double {
+        let lower = sentence.lowercased()
+        var score = 0.0
+        if sentence.count >= 55 && sentence.count <= 170 { score += 0.24 }
+        if sentence.contains("?") { score += 0.08 }
+        if sentence.contains(";") || sentence.contains(":") { score += 0.06 }
+        let hits = impactLexicon.filter { lower.contains($0) }.count
+        score += min(0.48, Double(hits) * 0.07)
+        return score
+    }
+
+    private static func segmentImpactScore(_ text: String, category: PassageCategory) -> Double {
+        let lower = text.lowercased()
+        let words = text.split(whereSeparator: \.isWhitespace)
+        let sentenceCount = text.split(whereSeparator: { ".!?".contains($0) }).count
+
+        var score = 0.0
+        if words.count >= 65 && words.count <= 230 { score += 0.22 }
+        if sentenceCount >= 3 && sentenceCount <= 8 { score += 0.13 }
+        if text.contains("?") { score += 0.05 }
+        if text.contains(";") || text.contains(":") { score += 0.04 }
+
+        let coreHits = impactLexicon.filter { lower.contains($0) }.count
+        score += min(0.46, Double(coreHits) * 0.055)
+
+        let categoryHits = categoryImpactLexicon(for: category).filter { lower.contains($0) }.count
+        score += min(0.24, Double(categoryHits) * 0.06)
+
+        return score
+    }
+
+    private static func categoryImpactLexicon(for category: PassageCategory) -> [String] {
+        switch category {
+        case .science:
+            return ["evidence", "experiment", "theory", "brain", "attention", "signal"]
+        case .history:
+            return ["empire", "civilization", "pattern", "institution", "century", "power"]
+        case .philosophy:
+            return ["virtue", "truth", "judgment", "wisdom", "character", "agency"]
+        case .economics:
+            return ["incentive", "tradeoff", "compounding", "scarcity", "capital", "leverage"]
+        case .psychology:
+            return ["habit", "emotion", "identity", "behavior", "motivation", "self-control"]
+        case .literature:
+            return ["meaning", "story", "voice", "language", "memory", "imagination"]
+        case .mathematics:
+            return ["proof", "structure", "logic", "model", "probability", "precision"]
+        case .technology:
+            return ["system", "design", "algorithm", "tool", "build", "feedback"]
+        }
+    }
+
+    private static let impactLexicon: [String] = [
+        "attention", "focus", "discipline", "clarity", "decision", "freedom", "agency",
+        "courage", "truth", "character", "responsibility", "purpose", "leverage",
+        "compounding", "pattern", "consequence", "habit", "memory", "signal", "future"
+    ]
 
     private static func finalizedQuoteSentence(_ text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -468,6 +540,854 @@ struct FreeReadFeedItem: Identifiable {
             symbol: "hourglass.bottomhalf.filled",
             palette: [Color(hex: "4D3B24"), Color(hex: "35291A"), Color(hex: "1A150D")]
         ),
+        FreeReadStory(
+            id: "obstacle-way",
+            title: "Obstacle as Training",
+            quote: "The impediment to action advances action.",
+            body: """
+            Marcus Aurelius wrote this while governing through war and plague: what blocks the path can become the path itself. The Stoic move is not denial. It is conversion.
+
+            Friction can be interpreted as proof you are on the right task. Hard work with meaningful stakes should feel demanding. That sensation is not failure; it is adaptation in real time.
+
+            Ask one better question today: what skill is this obstacle forcing me to build?
+            """,
+            category: .philosophy,
+            source: "Meditations — Marcus Aurelius (public domain)",
+            symbol: "flame.fill",
+            palette: [Color(hex: "4D3B24"), Color(hex: "35291A"), Color(hex: "1A150D")]
+        ),
+        FreeReadStory(
+            id: "control-and-choice",
+            title: "Control and Choice",
+            quote: "Work first on your judgment, then on your circumstances.",
+            body: """
+            Epictetus taught that anxiety grows when we demand certainty from a world that cannot promise it. We control judgments, actions, and commitments; we do not control outcomes, reactions, or luck.
+
+            This distinction is not passive. It is a strategic allocation of emotional energy. You become calmer not by lowering standards, but by investing effort where leverage is highest.
+
+            Before your next decision, separate what is yours to shape from what is yours to accept.
+            """,
+            category: .psychology,
+            source: "Enchiridion — Epictetus (public domain)",
+            symbol: "person.crop.circle.badge.questionmark",
+            palette: [Color(hex: "5A3D28"), Color(hex: "3C2A1B"), Color(hex: "1E150D")]
+        ),
+        FreeReadStory(
+            id: "darwin-patience",
+            title: "Patience Outlasts Noise",
+            quote: "Great understanding usually arrives after long observation.",
+            body: """
+            Darwin spent decades collecting evidence before publishing his most controversial idea. His edge was not speed. It was disciplined attention over long intervals.
+
+            We underestimate the power of patient accumulation: repeated observation, careful note-taking, and willingness to revise assumptions as new evidence appears.
+
+            When the world rewards hot takes, patient truth-seeking becomes a competitive advantage.
+            """,
+            category: .science,
+            source: "On the Origin of Species — Charles Darwin (public domain)",
+            symbol: "atom",
+            palette: [Color(hex: "58371F"), Color(hex: "3D2615"), Color(hex: "1E130A")]
+        ),
+        FreeReadStory(
+            id: "franklin-compound",
+            title: "Compounding in Character",
+            quote: "Little strokes fell great oaks.",
+            body: """
+            Franklin's line is economic and moral at once: repeated, small effort can reshape large systems over time. This is true for money, habits, trust, and craft.
+
+            Big goals often fail because they demand intensity without structure. Small standards survive because they are repeatable under real-life constraints.
+
+            Protect your daily minimum. The minimum is where long-term identity is built.
+            """,
+            category: .economics,
+            source: "Poor Richard's Almanack — Benjamin Franklin (public domain)",
+            symbol: "chart.line.uptrend.xyaxis",
+            palette: [Color(hex: "53381E"), Color(hex: "3A2714"), Color(hex: "1D140A")]
+        ),
+        FreeReadStory(
+            id: "lincoln-angles",
+            title: "Better Angels Under Pressure",
+            quote: "The language you choose can decide the future you get.",
+            body: """
+            Lincoln's speeches were strategic acts of moral framing. He understood that in periods of division, words can either harden camps or widen the space for shared purpose.
+
+            High-impact reading is not just collecting facts. It is studying how leaders move attention from panic toward principle.
+
+            In conflict, aim for language that preserves truth and keeps cooperation possible.
+            """,
+            category: .history,
+            source: "First Inaugural Address — Abraham Lincoln (public domain)",
+            symbol: "building.columns.fill",
+            palette: [Color(hex: "5C3A22"), Color(hex: "3E2718"), Color(hex: "1F140C")]
+        ),
+        FreeReadStory(
+            id: "ada-instructions",
+            title: "Instructions Beat Inspiration",
+            quote: "A powerful system is one you can describe precisely.",
+            body: """
+            Ada Lovelace saw early that computing was not just machinery; it was symbolic instruction. Power comes from clear procedures that can be executed consistently.
+
+            Most personal systems fail because they are motivational, not operational. A good system is explicit enough to run on low-energy days.
+
+            If you cannot write your process in a few steps, you are still relying on mood.
+            """,
+            category: .technology,
+            source: "Notes on the Analytical Engine — Ada Lovelace (public domain)",
+            symbol: "cpu",
+            palette: [Color(hex: "4A361F"), Color(hex: "332515"), Color(hex: "1A130A")]
+        ),
+        FreeReadStory(
+            id: "euclid-proof",
+            title: "Proof Before Opinion",
+            quote: "Structure protects you from confident nonsense.",
+            body: """
+            Euclid's method is a discipline of sequence: define terms, state assumptions, prove claims step by step. It turns argument from performance into verification.
+
+            The same discipline helps with modern decisions. What are your assumptions? What evidence would falsify them? What follows logically?
+
+            Precision is not coldness. It is respect for truth under pressure.
+            """,
+            category: .mathematics,
+            source: "Elements — Euclid (public domain)",
+            symbol: "sum",
+            palette: [Color(hex: "5E3F22"), Color(hex: "402C17"), Color(hex: "20160B")]
+        ),
+        FreeReadStory(
+            id: "douglass-literacy",
+            title: "Reading as Liberation",
+            quote: "Literacy changes what kinds of life are imaginable.",
+            body: """
+            Frederick Douglass described reading as a turning point in human agency. Words gave him a larger map of reality and a language for resistance.
+
+            High-impact passages expand possibility. They help you name problems accurately and imagine responses that were previously invisible.
+
+            Read not only for information, but for enlargement of self-command.
+            """,
+            category: .literature,
+            source: "Narrative of the Life of Frederick Douglass (public domain)",
+            symbol: "book.closed",
+            palette: [Color(hex: "4F3424"), Color(hex: "372518"), Color(hex: "1B130C")]
+        ),
+        FreeReadStory(
+            id: "seneca-time",
+            title: "Spend Time Like Capital",
+            quote: "It is not that life is short; it is that we waste much of it.",
+            body: """
+            Seneca frames time as your primary asset. Most people guard money more carefully than attention, then wonder why their days feel fragmented and thin.
+
+            A powerful schedule is not packed. It is protected. Unclaimed time is quickly captured by default demands and low-quality stimulation.
+
+            Treat one hour daily as non-negotiable investment time for your future self.
+            """,
+            category: .economics,
+            source: "On the Shortness of Life — Seneca (public domain)",
+            symbol: "banknote.fill",
+            palette: [Color(hex: "53381E"), Color(hex: "3A2714"), Color(hex: "1D140A")]
+        ),
+        FreeReadStory(
+            id: "james-attention",
+            title: "Attention Chooses Reality",
+            quote: "My experience is what I agree to attend to.",
+            body: """
+            William James recognized attention as a selection mechanism. In practice, your mind is always editing. What it repeats becomes what feels real.
+
+            This is why your informational diet matters. Repeated exposure trains emotional baselines, threat perception, and default narratives.
+
+            Pick your inputs with the same care you use for your closest relationships.
+            """,
+            category: .psychology,
+            source: "The Principles of Psychology — William James (public domain)",
+            symbol: "eye.fill",
+            palette: [Color(hex: "5A3D28"), Color(hex: "3C2A1B"), Color(hex: "1E150D")]
+        ),
+        FreeReadStory(
+            id: "emerson-self-trust",
+            title: "Trust the Inner Signal",
+            quote: "Nothing is at last sacred but the integrity of your own mind.",
+            body: """
+            Emerson's point is not arrogance. It is authorship. Borrowed opinions are easy to collect and hard to live by.
+
+            High-impact reading should not end in mimicry. It should sharpen your independent judgment so your actions are coherent across pressure, praise, and doubt.
+
+            Read deeply, then test ideas against your own lived evidence.
+            """,
+            category: .literature,
+            source: "Self-Reliance — Ralph Waldo Emerson (public domain)",
+            symbol: "text.book.closed.fill",
+            palette: [Color(hex: "4F3424"), Color(hex: "372518"), Color(hex: "1B130C")]
+        ),
+        FreeReadStory(
+            id: "faraday-wonder",
+            title: "Curiosity with Discipline",
+            quote: "Wonder becomes power when it is organized into method.",
+            body: """
+            Faraday began as a bookbinder's apprentice and became one of the most consequential experimental scientists in history through relentless, careful practice.
+
+            Curiosity alone is not enough. Impact comes from disciplined loops: observe, test, record, refine. Repeat for years.
+
+            Treat every question as an experiment and every experiment as a way to upgrade judgment.
+            """,
+            category: .science,
+            source: "Experimental Researches in Electricity — Michael Faraday (public domain)",
+            symbol: "bolt.fill",
+            palette: [Color(hex: "58371F"), Color(hex: "3D2615"), Color(hex: "1E130A")]
+        ),
+        FreeReadStory(
+            id: "adam-smith-incentives",
+            title: "Incentives Shape Behavior",
+            quote: "Systems produce what they reward, not what they promise.",
+            body: """
+            Adam Smith observed that markets coordinate human effort through incentives, not speeches. People respond to structures: prices, constraints, trust, and accountability.
+
+            The same principle applies to personal habits. If your environment rewards distraction, distraction wins. If your environment rewards deep work, focus becomes easier than force.
+
+            Upgrade the structure first. Motivation follows systems more reliably than systems follow motivation.
+            """,
+            category: .economics,
+            source: "The Wealth of Nations — Adam Smith (public domain)",
+            symbol: "banknote.fill",
+            palette: [Color(hex: "53381E"), Color(hex: "3A2714"), Color(hex: "1D140A")]
+        ),
+        FreeReadStory(
+            id: "cicero-duty",
+            title: "Duty Before Comfort",
+            quote: "Character is built when principle outranks convenience.",
+            body: """
+            Cicero argued that useful and honorable should never be treated as enemies. Real leadership is the discipline of choosing what is right, especially when the easier option is available.
+
+            High-impact reading from political philosophy reminds us that ethics is practical. It governs hiring, promises, attention, and how we act when nobody is watching.
+
+            Before your next decision, ask what preserves both results and integrity.
+            """,
+            category: .philosophy,
+            source: "On Duties — Cicero (public domain)",
+            symbol: "scale.3d",
+            palette: [Color(hex: "4D3B24"), Color(hex: "35291A"), Color(hex: "1A150D")]
+        ),
+        FreeReadStory(
+            id: "sun-tzu-preparation",
+            title: "Preparation Is Quiet Power",
+            quote: "Victories are often earned before the contest begins.",
+            body: """
+            Sun Tzu's core insight is strategic: outcomes are shaped in preparation, positioning, and clarity long before visible conflict starts.
+
+            In modern life, this means planning your day before notifications arrive, rehearsing hard conversations before pressure rises, and deciding standards before temptation appears.
+
+            Winning is less about dramatic moments and more about invisible readiness.
+            """,
+            category: .history,
+            source: "The Art of War — Sun Tzu (public domain translation)",
+            symbol: "shield.lefthalf.filled",
+            palette: [Color(hex: "5C3A22"), Color(hex: "3E2718"), Color(hex: "1F140C")]
+        ),
+        FreeReadStory(
+            id: "descartes-method",
+            title: "Think in Clear Steps",
+            quote: "Complexity breaks when you force it into method.",
+            body: """
+            Descartes proposed a practical method: divide difficult problems into smaller parts, solve the simple pieces, then rebuild the whole with order.
+
+            This is still the foundation of engineering, writing, and decision-making. Confusion usually means too many variables are being held at once.
+
+            When stuck, reduce the problem until the next move is obvious.
+            """,
+            category: .mathematics,
+            source: "Discourse on Method — Rene Descartes (public domain)",
+            symbol: "sum",
+            palette: [Color(hex: "5E3F22"), Color(hex: "402C17"), Color(hex: "20160B")]
+        ),
+        FreeReadStory(
+            id: "bacon-studies",
+            title: "Read to Weigh and Consider",
+            quote: "Reading should sharpen judgment, not decorate memory.",
+            body: """
+            Francis Bacon warned against shallow consumption: some books are to be tasted, others swallowed, and a few digested. The point is selective depth.
+
+            High-impact readers do not collect pages as trophies. They read with questions and test ideas against reality.
+
+            Choose one passage today to digest, not skim.
+            """,
+            category: .literature,
+            source: "Of Studies — Francis Bacon (public domain)",
+            symbol: "text.book.closed.fill",
+            palette: [Color(hex: "4F3424"), Color(hex: "372518"), Color(hex: "1B130C")]
+        ),
+        FreeReadStory(
+            id: "thoreau-simplicity",
+            title: "Simplicity Restores Signal",
+            quote: "Simplify your inputs so your mind can hear itself.",
+            body: """
+            Thoreau's experiment at Walden was not escapism. It was information design. He reduced noise to discover what was essential.
+
+            Modern attention systems are louder, but the principle is unchanged. Every subtraction creates space for better observation.
+
+            Remove one unnecessary input and notice how quickly clarity returns.
+            """,
+            category: .psychology,
+            source: "Walden — Henry David Thoreau (public domain)",
+            symbol: "leaf.fill",
+            palette: [Color(hex: "5A3D28"), Color(hex: "3C2A1B"), Color(hex: "1E150D")]
+        ),
+        FreeReadStory(
+            id: "wollstonecraft-reason",
+            title: "Reason Expands Freedom",
+            quote: "Education is leverage for agency.",
+            body: """
+            Wollstonecraft argued that dignity requires development of reason, not dependence on approval. Education is not decoration; it is power.
+
+            High-impact passages on self-development should leave you more capable of independent thought, not more dependent on trends.
+
+            Read to strengthen judgment that cannot be outsourced.
+            """,
+            category: .history,
+            source: "A Vindication of the Rights of Woman — Mary Wollstonecraft (public domain)",
+            symbol: "person.2.fill",
+            palette: [Color(hex: "5C3A22"), Color(hex: "3E2718"), Color(hex: "1F140C")]
+        ),
+        FreeReadStory(
+            id: "dubois-education",
+            title: "Learning as Liberation",
+            quote: "Serious study can turn survival into leadership.",
+            body: """
+            W. E. B. Du Bois treated education as social force, not private vanity. Knowledge equips people to name systems accurately and act with coordinated purpose.
+
+            High-impact reading does not stop at insight. It changes how communities organize, decide, and imagine futures.
+
+            Ask what this passage helps you improve beyond yourself.
+            """,
+            category: .history,
+            source: "The Souls of Black Folk — W. E. B. Du Bois (public domain)",
+            symbol: "building.2.fill",
+            palette: [Color(hex: "5C3A22"), Color(hex: "3E2718"), Color(hex: "1F140C")]
+        ),
+        FreeReadStory(
+            id: "nightingale-measure",
+            title: "Measure What Matters",
+            quote: "Evidence protects care from guesswork.",
+            body: """
+            Florence Nightingale transformed outcomes by insisting that observation and data should guide action. Compassion became more effective when paired with measurement.
+
+            The lesson applies far beyond healthcare: if you do not track reality, optimism and fear both become unreliable narrators.
+
+            Keep one honest metric for the behavior you want to improve.
+            """,
+            category: .science,
+            source: "Notes on Nursing — Florence Nightingale (public domain)",
+            symbol: "waveform.path.ecg",
+            palette: [Color(hex: "58371F"), Color(hex: "3D2615"), Color(hex: "1E130A")]
+        ),
+        FreeReadStory(
+            id: "montaigne-self-observation",
+            title: "Observe Yourself Clearly",
+            quote: "Self-knowledge is a practical skill, not a mood.",
+            body: """
+            Montaigne wrote essays as experiments in honest observation. He studied his own mind to understand universal habits of fear, ego, and contradiction.
+
+            Reflection becomes useful when it is specific: what triggered me, what assumption failed, what pattern repeated?
+
+            Write one precise observation about your behavior today and turn it into a better rule tomorrow.
+            """,
+            category: .psychology,
+            source: "Essays — Michel de Montaigne (public domain translation)",
+            symbol: "eye.fill",
+            palette: [Color(hex: "5A3D28"), Color(hex: "3C2A1B"), Color(hex: "1E150D")]
+        ),
+        FreeReadStory(
+            id: "james-allen-thought",
+            title: "Attention Becomes Character",
+            quote: "What you repeatedly think, you eventually become.",
+            body: """
+            James Allen emphasized that thoughts are not harmless background noise. Repeated mental patterns set direction for behavior, relationships, and standards.
+
+            This is why reading quality matters. Inputs become inner language, and inner language becomes action under pressure.
+
+            Protect the first ideas you consume each day. They seed the rest.
+            """,
+            category: .psychology,
+            source: "As a Man Thinketh — James Allen (public domain)",
+            symbol: "brain.head.profile",
+            palette: [Color(hex: "5A3D28"), Color(hex: "3C2A1B"), Color(hex: "1E150D")]
+        ),
+        FreeReadStory(
+            id: "kierkegaard-choice",
+            title: "Choose with Commitment",
+            quote: "A life is shaped less by options than by commitments.",
+            body: """
+            Kierkegaard wrote that endless possibility can become paralysis. Commitment converts abstract potential into concrete identity.
+
+            In a feed-driven world, you can sample everything and build nothing. Depth requires repeated return to chosen practices.
+
+            Pick one reading theme for this week and commit long enough to feel the compounding.
+            """,
+            category: .philosophy,
+            source: "Either/Or — Soren Kierkegaard (public domain translation)",
+            symbol: "checkmark.seal.fill",
+            palette: [Color(hex: "4D3B24"), Color(hex: "35291A"), Color(hex: "1A150D")]
+        ),
+        FreeReadStory(
+            id: "bastiat-seen-unseen",
+            title: "Seen and Unseen Effects",
+            quote: "Good decisions account for consequences beyond the first reaction.",
+            body: """
+            Bastiat's classic point is simple and brutal: people applaud visible benefits while ignoring hidden costs that arrive later or elsewhere.
+
+            The same mistake appears in personal life. Short-term relief often hides long-term erosion of attention, health, or trust.
+
+            Evaluate choices across time, not just across headlines.
+            """,
+            category: .economics,
+            source: "That Which Is Seen, and That Which Is Not Seen — Frederic Bastiat (public domain)",
+            symbol: "banknote.fill",
+            palette: [Color(hex: "53381E"), Color(hex: "3A2714"), Color(hex: "1D140A")]
+        ),
+        FreeReadStory(
+            id: "malthus-constraints",
+            title: "Respect Constraints Early",
+            quote: "Ignoring limits does not remove them.",
+            body: """
+            Malthus is often reduced to controversy, but one durable insight remains: systems fail when growth assumptions ignore real constraints.
+
+            Attention, money, and energy all behave this way. Plans collapse when they demand infinite output from finite capacity.
+
+            Sustainable momentum starts by designing with limits, not against them.
+            """,
+            category: .economics,
+            source: "An Essay on the Principle of Population — Thomas Malthus (public domain)",
+            symbol: "chart.line.uptrend.xyaxis",
+            palette: [Color(hex: "53381E"), Color(hex: "3A2714"), Color(hex: "1D140A")]
+        ),
+        FreeReadStory(
+            id: "mill-liberty-voice",
+            title: "Protect Dissenting Voices",
+            quote: "Silencing disagreement weakens truth itself.",
+            body: """
+            Mill argued that free discussion is not a luxury. It is how bad ideas are exposed and good ideas are sharpened.
+
+            Even true beliefs become fragile when never challenged. Debate forces precision, evidence, and humility.
+
+            Read viewpoints that disagree with you and test what survives.
+            """,
+            category: .philosophy,
+            source: "On Liberty — John Stuart Mill (public domain)",
+            symbol: "bubble.left.and.text.bubble.right.fill",
+            palette: [Color(hex: "4D3B24"), Color(hex: "35291A"), Color(hex: "1A150D")]
+        ),
+        FreeReadStory(
+            id: "laozi-empty-space",
+            title: "Power of Empty Space",
+            quote: "What is left open often creates what is useful.",
+            body: """
+            Laozi noticed that usefulness comes from space as much as substance: a room works because it is not filled, a cup works because it is hollow.
+
+            The same applies to focus. A calendar packed to the edge produces motion without reflection.
+
+            Leave white space in your day so better thought can appear.
+            """,
+            category: .philosophy,
+            source: "Tao Te Ching — Laozi (public domain translation)",
+            symbol: "circle.lefthalf.filled",
+            palette: [Color(hex: "4D3B24"), Color(hex: "35291A"), Color(hex: "1A150D")]
+        ),
+        FreeReadStory(
+            id: "heraclitus-flow",
+            title: "Work with Change",
+            quote: "You never step into the same river twice.",
+            body: """
+            Heraclitus frames reality as movement. Stability is temporary, and adaptation is a core skill rather than a special event.
+
+            High-impact readers expect change and train principles that travel across changing conditions.
+
+            Build routines that are sturdy enough to guide you and flexible enough to survive reality.
+            """,
+            category: .philosophy,
+            source: "Fragments — Heraclitus (public domain translation)",
+            symbol: "water.waves",
+            palette: [Color(hex: "4D3B24"), Color(hex: "35291A"), Color(hex: "1A150D")]
+        ),
+        FreeReadStory(
+            id: "tocqueville-associations",
+            title: "Communities Build Strength",
+            quote: "Free people stay free by practicing cooperation.",
+            body: """
+            Tocqueville observed that strong societies are sustained by everyday civic participation: clubs, associations, and local responsibility.
+
+            Agency is not only individual willpower. It is also social design that helps people act together.
+
+            Invest in one community where your effort compounds with others.
+            """,
+            category: .history,
+            source: "Democracy in America — Alexis de Tocqueville (public domain)",
+            symbol: "person.3.fill",
+            palette: [Color(hex: "5C3A22"), Color(hex: "3E2718"), Color(hex: "1F140C")]
+        ),
+        FreeReadStory(
+            id: "washington-farewell-unity",
+            title: "Guard Long-Term Unity",
+            quote: "Short-term faction wins can produce long-term national losses.",
+            body: """
+            Washington's farewell warning was strategic: extreme party conflict can make a nation easier to manipulate and harder to govern.
+
+            On a personal level, the lesson generalizes. Constant internal conflict between goals destroys focus and confidence.
+
+            Align your priorities before you optimize your schedule.
+            """,
+            category: .history,
+            source: "Farewell Address — George Washington (public domain)",
+            symbol: "flag.fill",
+            palette: [Color(hex: "5C3A22"), Color(hex: "3E2718"), Color(hex: "1F140C")]
+        ),
+        FreeReadStory(
+            id: "clausewitz-friction",
+            title: "Expect Friction",
+            quote: "In real execution, simple things become hard.",
+            body: """
+            Clausewitz called friction the gap between plans on paper and action in reality. Delays, confusion, and fatigue are normal, not surprising.
+
+            The advantage goes to teams and individuals who design for friction instead of pretending it will not happen.
+
+            Build buffers, fallback options, and clear priorities before pressure arrives.
+            """,
+            category: .history,
+            source: "On War — Carl von Clausewitz (public domain translation)",
+            symbol: "shield.fill",
+            palette: [Color(hex: "5C3A22"), Color(hex: "3E2718"), Color(hex: "1F140C")]
+        ),
+        FreeReadStory(
+            id: "boole-symbolic-thought",
+            title: "Translate Thought into Structure",
+            quote: "Clear symbols make complex reasoning manageable.",
+            body: """
+            Boole showed that logic could be formalized into symbolic operations. This transformed reasoning from intuition alone into repeatable method.
+
+            Modern software inherits this move. Precision in representation reduces ambiguity in execution.
+
+            When you are confused, rewrite the problem in cleaner terms first.
+            """,
+            category: .technology,
+            source: "The Laws of Thought — George Boole (public domain)",
+            symbol: "cpu.fill",
+            palette: [Color(hex: "4A361F"), Color(hex: "332515"), Color(hex: "1A130A")]
+        ),
+        FreeReadStory(
+            id: "maxwell-models",
+            title: "Models Reveal Hidden Forces",
+            quote: "A good model lets you see what experience alone misses.",
+            body: """
+            Maxwell's equations unified electricity and magnetism by revealing structure beneath scattered observations.
+
+            Models are compression tools for thinking. They let you predict behavior in new situations rather than memorizing isolated facts.
+
+            Learn one strong model each week and apply it outside its original domain.
+            """,
+            category: .science,
+            source: "A Treatise on Electricity and Magnetism — James Clerk Maxwell (public domain)",
+            symbol: "bolt.badge.a.fill",
+            palette: [Color(hex: "58371F"), Color(hex: "3D2615"), Color(hex: "1E130A")]
+        ),
+        FreeReadStory(
+            id: "pasteur-observation",
+            title: "Chance Favors Prepared Minds",
+            quote: "Breakthroughs reward those already paying close attention.",
+            body: """
+            Pasteur's famous idea was practical, not mystical. Luck helps most when you have already built method, skill, and curiosity.
+
+            Preparation turns random events into useful signals. Without preparation, the same event passes unnoticed.
+
+            Study consistently so opportunity has somewhere to land.
+            """,
+            category: .science,
+            source: "Scientific writings of Louis Pasteur (public domain translation)",
+            symbol: "cross.case.fill",
+            palette: [Color(hex: "58371F"), Color(hex: "3D2615"), Color(hex: "1E130A")]
+        ),
+        FreeReadStory(
+            id: "pavlov-cues",
+            title: "Design Better Cues",
+            quote: "Behavior often follows triggers before intentions.",
+            body: """
+            Pavlov's experiments highlighted how strongly cues shape response. We like to think actions come from conscious choice, but context often acts first.
+
+            High-impact habit change starts by redesigning triggers: what you see, where you place tools, what appears first on your screen.
+
+            Make the first cue of your day point toward who you want to become.
+            """,
+            category: .psychology,
+            source: "Conditioned Reflexes — Ivan Pavlov (public domain translation)",
+            symbol: "bell.fill",
+            palette: [Color(hex: "5A3D28"), Color(hex: "3C2A1B"), Color(hex: "1E150D")]
+        ),
+        FreeReadStory(
+            id: "austen-attention-detail",
+            title: "Read the Subtext",
+            quote: "What people imply often matters more than what they announce.",
+            body: """
+            Austen's social intelligence lives in details: tone, timing, hesitation, and quiet contradictions between speech and motive.
+
+            Literature trains perception. You become better at reading people, not only pages.
+
+            When you review a conversation, look for the subtext you missed in real time.
+            """,
+            category: .literature,
+            source: "Pride and Prejudice — Jane Austen (public domain)",
+            symbol: "book.closed.fill",
+            palette: [Color(hex: "4F3424"), Color(hex: "372518"), Color(hex: "1B130C")]
+        ),
+        FreeReadStory(
+            id: "pascal-focus",
+            title: "Stillness Builds Depth",
+            quote: "Many problems begin when attention cannot stay still.",
+            body: """
+            Pascal observed that much human misery comes from inability to remain quietly in one room. Restlessness seeks distraction before understanding.
+
+            Depth needs stillness long enough for first thoughts to pass and better thoughts to appear.
+
+            Practice five undistracted minutes before every major reading session.
+            """,
+            category: .psychology,
+            source: "Pensees — Blaise Pascal (public domain translation)",
+            symbol: "moon.stars.fill",
+            palette: [Color(hex: "5A3D28"), Color(hex: "3C2A1B"), Color(hex: "1E150D")]
+        ),
+        FreeReadStory(
+            id: "aristotle-habit-virtue",
+            title: "Habits Build Character",
+            quote: "You become what you repeatedly practice.",
+            body: """
+            Aristotle's ethics is concrete: excellence is not a one-time act but a stable pattern built through repeated choices.
+
+            Big identity shifts usually begin with tiny repeated actions. What feels small today becomes automatic tomorrow.
+
+            Choose one behavior worth repeating and protect it daily.
+            """,
+            category: .philosophy,
+            source: "Nicomachean Ethics — Aristotle (public domain translation)",
+            symbol: "checkmark.shield.fill",
+            palette: [Color(hex: "4D3B24"), Color(hex: "35291A"), Color(hex: "1A150D")]
+        ),
+        FreeReadStory(
+            id: "confucius-name-things",
+            title: "Name Things Clearly",
+            quote: "Order begins when language is precise.",
+            body: """
+            Confucius emphasized that disorder often starts with vague words. If names are unclear, responsibilities blur and trust erodes.
+
+            Precision is not pedantry. It is respect for reality and for other people trying to coordinate with you.
+
+            Define your goal in one exact sentence before you start work.
+            """,
+            category: .history,
+            source: "Analects — Confucius (public domain translation)",
+            symbol: "character.book.closed.fill",
+            palette: [Color(hex: "5C3A22"), Color(hex: "3E2718"), Color(hex: "1F140C")]
+        ),
+        FreeReadStory(
+            id: "dhammapada-right-effort",
+            title: "Train the Inner Direction",
+            quote: "Guard attention before it becomes action.",
+            body: """
+            The Dhammapada frames mind as the starting point of conduct. Thoughts repeated become speech; speech repeated becomes habit.
+
+            Psychological discipline is easier upstream. Correcting a thought early is cheaper than correcting consequences later.
+
+            Catch one negative loop early today and redirect it deliberately.
+            """,
+            category: .psychology,
+            source: "Dhammapada (public domain translation)",
+            symbol: "brain.head.profile",
+            palette: [Color(hex: "5A3D28"), Color(hex: "3C2A1B"), Color(hex: "1E150D")]
+        ),
+        FreeReadStory(
+            id: "plato-examined-life",
+            title: "Examine Assumptions",
+            quote: "Unexamined assumptions silently run your life.",
+            body: """
+            Plato's dialogues model a discipline of questioning: define terms, test claims, expose contradictions, then revise.
+
+            This is high-impact reading in action. You do not passively absorb ideas; you interrogate them until they can survive scrutiny.
+
+            Pick one belief you hold and ask what evidence would change your mind.
+            """,
+            category: .philosophy,
+            source: "Apology and Dialogues — Plato (public domain translation)",
+            symbol: "questionmark.app.fill",
+            palette: [Color(hex: "4D3B24"), Color(hex: "35291A"), Color(hex: "1A150D")]
+        ),
+        FreeReadStory(
+            id: "thucydides-human-drivers",
+            title: "Fear, Honor, Interest",
+            quote: "Major decisions are often driven by a small set of motives.",
+            body: """
+            Thucydides tracked conflict with unusual realism. Beneath speeches and slogans, he saw recurring drivers: fear, honor, and interest.
+
+            Naming the true driver behind behavior improves strategy immediately. You stop arguing with appearances and start working with causes.
+
+            In your next conflict, identify the dominant motive before proposing a solution.
+            """,
+            category: .history,
+            source: "History of the Peloponnesian War — Thucydides (public domain translation)",
+            symbol: "shield.fill",
+            palette: [Color(hex: "5C3A22"), Color(hex: "3E2718"), Color(hex: "1F140C")]
+        ),
+        FreeReadStory(
+            id: "machiavelli-reality-check",
+            title: "See the World as It Is",
+            quote: "Strategy fails when it ignores real incentives.",
+            body: """
+            Machiavelli's hard lesson is diagnostic: plans based on wishful assumptions collapse when pressure arrives.
+
+            Realism is not cynicism. It is accurate mapping of incentives, risks, and human behavior before action.
+
+            Ask whether your current plan is built on evidence or on hope.
+            """,
+            category: .history,
+            source: "The Prince — Niccolo Machiavelli (public domain translation)",
+            symbol: "map.fill",
+            palette: [Color(hex: "5C3A22"), Color(hex: "3E2718"), Color(hex: "1F140C")]
+        ),
+        FreeReadStory(
+            id: "montesquieu-balance-power",
+            title: "Design for Checks",
+            quote: "Good systems prevent abuse before it starts.",
+            body: """
+            Montesquieu argued that concentrated power eventually overreaches. Durable institutions separate authority so correction is always possible.
+
+            Personal systems benefit from the same idea: use constraints and review loops so one bad impulse cannot dominate outcomes.
+
+            Add one check to your routine that catches mistakes early.
+            """,
+            category: .history,
+            source: "The Spirit of Laws — Montesquieu (public domain translation)",
+            symbol: "building.columns.fill",
+            palette: [Color(hex: "5C3A22"), Color(hex: "3E2718"), Color(hex: "1F140C")]
+        ),
+        FreeReadStory(
+            id: "gibbon-slow-decay",
+            title: "Decline Is Usually Gradual",
+            quote: "Most collapses begin as tolerated small failures.",
+            body: """
+            Gibbon's account of Rome shows that decay is often incremental: standards slip, institutions weaken, and warning signs are normalized.
+
+            The same dynamic applies to personal discipline. You rarely lose direction all at once; you drift by unchallenged exceptions.
+
+            Audit one standard you have been quietly lowering and restore it.
+            """,
+            category: .history,
+            source: "The History of the Decline and Fall of the Roman Empire — Edward Gibbon (public domain)",
+            symbol: "hourglass.bottomhalf.filled",
+            palette: [Color(hex: "5C3A22"), Color(hex: "3E2718"), Color(hex: "1F140C")]
+        ),
+        FreeReadStory(
+            id: "galileo-measure-nature",
+            title: "Measure Before Belief",
+            quote: "What can be measured can be tested.",
+            body: """
+            Galileo insisted that claims about nature should face experiment and observation, not authority alone.
+
+            This mindset generalizes to everyday decisions: measure outcomes, compare expectations, then update behavior.
+
+            Replace one opinion this week with a tracked experiment.
+            """,
+            category: .science,
+            source: "Scientific writings of Galileo Galilei (public domain translation)",
+            symbol: "ruler.fill",
+            palette: [Color(hex: "58371F"), Color(hex: "3D2615"), Color(hex: "1E130A")]
+        ),
+        FreeReadStory(
+            id: "kepler-patient-law",
+            title: "Patience Finds Structure",
+            quote: "Persistence can reveal laws hidden in noise.",
+            body: """
+            Kepler spent years refining planetary models before finding the laws that fit the data. Breakthrough required stubborn iteration.
+
+            High-impact learning often looks like long periods of unclear progress followed by sudden coherence.
+
+            Stay with hard problems long enough for patterns to emerge.
+            """,
+            category: .mathematics,
+            source: "Astronomia Nova — Johannes Kepler (public domain translation)",
+            symbol: "function",
+            palette: [Color(hex: "5E3F22"), Color(hex: "402C17"), Color(hex: "20160B")]
+        ),
+        FreeReadStory(
+            id: "poincare-creative-order",
+            title: "Creativity Needs Structure",
+            quote: "Insight appears faster in minds trained by method.",
+            body: """
+            Poincare described mathematical discovery as a balance: disciplined groundwork plus incubation where the mind recombines ideas.
+
+            Creativity is not random magic. It is prepared intuition operating on well-organized material.
+
+            Build a note system that makes your ideas easier to recombine.
+            """,
+            category: .mathematics,
+            source: "Science and Method — Henri Poincare (public domain translation)",
+            symbol: "sum",
+            palette: [Color(hex: "5E3F22"), Color(hex: "402C17"), Color(hex: "20160B")]
+        ),
+        FreeReadStory(
+            id: "george-eliot-sympathy",
+            title: "Attention Is Moral",
+            quote: "To understand another life is a serious discipline.",
+            body: """
+            George Eliot's fiction expands moral perception by forcing readers to inhabit complex motives rather than stereotypes.
+
+            Literature at its best sharpens empathy without reducing accountability. You learn to see context and consequence together.
+
+            Read one difficult character as practice for real-world understanding.
+            """,
+            category: .literature,
+            source: "Middlemarch — George Eliot (public domain)",
+            symbol: "text.book.closed.fill",
+            palette: [Color(hex: "4F3424"), Color(hex: "372518"), Color(hex: "1B130C")]
+        ),
+        FreeReadStory(
+            id: "melville-depth-work",
+            title: "Go Deep, Not Just Fast",
+            quote: "Depth changes you in ways speed cannot.",
+            body: """
+            Melville's long-form narrative rewards sustained attention. It is a reminder that some insights only appear after extended engagement.
+
+            Feed-driven reading trains quick reaction. Book-level reading trains depth, memory, and synthesis.
+
+            Spend one session this week reading beyond your comfort span.
+            """,
+            category: .literature,
+            source: "Moby-Dick — Herman Melville (public domain)",
+            symbol: "book.fill",
+            palette: [Color(hex: "4F3424"), Color(hex: "372518"), Color(hex: "1B130C")]
+        ),
+        FreeReadStory(
+            id: "booker-washington-build-skill",
+            title: "Build Skill Under Constraint",
+            quote: "Progress is often built with what you already have.",
+            body: """
+            Booker T. Washington emphasized disciplined skill-building even in constrained conditions. Agency grows when effort is directed toward mastery.
+
+            Waiting for ideal conditions delays momentum. Small, consistent improvement compounds into real leverage.
+
+            Choose one practical skill and advance it daily, even in short intervals.
+            """,
+            category: .history,
+            source: "Up from Slavery — Booker T. Washington (public domain)",
+            symbol: "hammer.fill",
+            palette: [Color(hex: "5C3A22"), Color(hex: "3E2718"), Color(hex: "1F140C")]
+        ),
+        FreeReadStory(
+            id: "jane-addams-civic-duty",
+            title: "Service as Intelligence",
+            quote: "Understanding grows when you engage real human needs.",
+            body: """
+            Jane Addams treated social reform as disciplined observation plus action. Ideas were tested against lived community outcomes.
+
+            This is impact reading in civic form: study, apply, evaluate, improve.
+
+            Use one idea from today's reading to make one concrete environment better.
+            """,
+            category: .history,
+            source: "Democracy and Social Ethics — Jane Addams (public domain)",
+            symbol: "person.3.sequence.fill",
+            palette: [Color(hex: "5C3A22"), Color(hex: "3E2718"), Color(hex: "1F140C")]
+        ),
     ]
 }
 
@@ -578,7 +1498,8 @@ struct FreeReadView: View {
     }
 
     private func refreshFeedFromBooksAPI() async {
-        let stories = await GutendexService.shared.fetchStories(limit: 40)
+        let targetCount = 60
+        let stories = await GutendexService.shared.fetchStories(limit: targetCount)
 
         await MainActor.run {
             guard !stories.isEmpty else { return }
@@ -587,9 +1508,9 @@ struct FreeReadView: View {
                 FreeReadFeedItem(story: story, sequenceLabel: "Book \(index + 1)")
             }
 
-            if remoteItems.count < 40 {
+            if remoteItems.count < targetCount {
                 let fallback = FreeReadFeedItem.seedPool.shuffled()
-                remoteItems.append(contentsOf: fallback.prefix(40 - remoteItems.count))
+                remoteItems.append(contentsOf: fallback.prefix(targetCount - remoteItems.count))
             }
 
             masterPool = remoteItems
@@ -958,7 +1879,7 @@ struct HomeView: View {
     }
 
     private var personalizedFeed: [Passage] {
-        let all = PassageLibrary.all
+        let all = PassageLibrary.all.sorted { passageImpactScore($0) > passageImpactScore($1) }
         guard !preferredCategories.isEmpty else { return all }
 
         let prioritized = all.filter { preferredCategories.contains($0.category) }
@@ -966,14 +1887,24 @@ struct HomeView: View {
         return prioritized + fallback
     }
 
+    private var featuredCandidatePool: [Passage] {
+        let feed = personalizedFeed
+        guard !feed.isEmpty else { return [] }
+        let candidateCount = min(feed.count, 24)
+        return Array(feed.prefix(candidateCount))
+    }
+
     private var featuredPassages: [Passage] {
-        Array(personalizedFeed.prefix(6))
+        let shuffled = featuredCandidatePool.sorted {
+            featuredShuffleValue(for: $0) < featuredShuffleValue(for: $1)
+        }
+        return Array(shuffled.prefix(6))
     }
 
     private var communityPassages: [Passage] {
-        let feed = personalizedFeed
-        if feed.count <= 6 { return feed }
-        return Array(feed.dropFirst(6).prefix(6))
+        let featuredIDs = Set(featuredPassages.map(\.id))
+        let remainder = personalizedFeed.filter { !featuredIDs.contains($0.id) }
+        return Array(remainder.prefix(6))
     }
 
     private var quickStartPassages: [Passage] {
@@ -1228,6 +2159,64 @@ struct HomeView: View {
     private func openFreeRead(for category: PassageCategory) {
         appState.freeReadFocusCategory = category
         appState.selectedTab = .freeRead
+    }
+
+    private func passageImpactScore(_ passage: Passage) -> Double {
+        let text = "\(passage.title) \(passage.subtitle) \(passage.content)".lowercased()
+        let wordCount = passage.content.split(whereSeparator: \.isWhitespace).count
+        var score = 0.0
+
+        if wordCount >= 220 && wordCount <= 650 { score += 0.2 }
+        if passage.questions.count >= 3 { score += 0.08 }
+
+        let coreHits = homeImpactKeywords.filter { text.contains($0) }.count
+        score += min(0.52, Double(coreHits) * 0.045)
+
+        let categoryHits = homeCategoryKeywords(for: passage.category).filter { text.contains($0) }.count
+        score += min(0.3, Double(categoryHits) * 0.075)
+
+        if passage.difficulty == .medium { score += 0.06 }
+        if passage.difficulty == .hard { score += 0.04 }
+
+        return score
+    }
+
+    private func featuredShuffleValue(for passage: Passage) -> UInt64 {
+        var value = UInt64(bitPattern: Int64(passage.id))
+        value ^= UInt64(bitPattern: Int64(appState.featuredRotationSeed))
+        value &+= 0x9E3779B97F4A7C15
+        value = (value ^ (value >> 30)) &* 0xBF58476D1CE4E5B9
+        value = (value ^ (value >> 27)) &* 0x94D049BB133111EB
+        return value ^ (value >> 31)
+    }
+
+    private var homeImpactKeywords: [String] {
+        [
+            "attention", "focus", "habit", "discipline", "judgment", "decision", "responsibility",
+            "purpose", "truth", "agency", "character", "freedom", "consequence", "strategy",
+            "evidence", "leverage", "compounding", "pattern", "clarity", "resilience"
+        ]
+    }
+
+    private func homeCategoryKeywords(for category: PassageCategory) -> [String] {
+        switch category {
+        case .science:
+            return ["experiment", "evidence", "neural", "physics", "biology"]
+        case .history:
+            return ["empire", "civilization", "century", "institution", "conflict"]
+        case .philosophy:
+            return ["virtue", "wisdom", "ethics", "truth", "reason"]
+        case .economics:
+            return ["incentive", "tradeoff", "capital", "compounding", "scarcity"]
+        case .psychology:
+            return ["behavior", "emotion", "identity", "motivation", "self-control"]
+        case .literature:
+            return ["language", "meaning", "narrative", "voice", "imagination"]
+        case .mathematics:
+            return ["proof", "logic", "model", "probability", "precision"]
+        case .technology:
+            return ["system", "algorithm", "design", "tool", "feedback"]
+        }
     }
 }
 

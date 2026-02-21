@@ -63,6 +63,7 @@ class AppState: ObservableObject {
 
     @Published var currentScreen: AppScreen = .splash
     @Published var selectedTab: MainTab = .home
+    @Published var featuredRotationSeed: Int = Int.random(in: 1...Int.max)
     @Published var freeReadFocusCategory: PassageCategory?
     @Published var onboardingStep: Int = 0
     @Published var selectedPlan: SubscriptionPlan = .yearly
@@ -90,6 +91,10 @@ class AppState: ObservableObject {
 
     init() {
         refreshDailyUnlockCreditsIfNeeded()
+    }
+
+    func rotateFeaturedSeed() {
+        featuredRotationSeed = Int.random(in: 1...Int.max)
     }
     
     func navigate(to screen: AppScreen) {
