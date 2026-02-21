@@ -58,30 +58,12 @@ struct FreeReadFeedItem: Identifiable {
     let symbol: String
     let palette: [Color]
     let sequenceLabel: String
+    let visualSeed: Int
+    let baseLikeCount: Int
+    let shareText: String
+    let keyPassage: String
 
     var id: String { stableID }
-
-    var visualSeed: Int {
-        FreeReadFeedItem.deterministicSeed(stableID)
-    }
-
-    var baseLikeCount: Int {
-        220 + (visualSeed % 9400)
-    }
-
-    var shareText: String {
-        let preview = body.count > 320 ? "\(body.prefix(320))..." : body
-        var parts = ["\"\(quote)\"", preview, source]
-        if let sourceURL {
-            parts.append(sourceURL.absoluteString)
-        }
-        parts.append("Shared from Readtounlock")
-        return parts.joined(separator: "\n\n")
-    }
-
-    var keyPassage: String {
-        FreeReadFeedItem.compactPassage(from: body, maxChars: 620)
-    }
 
     init(stableID: String, title: String, quote: String, body: String, category: PassageCategory, source: String, sourceURL: URL? = nil, symbol: String, palette: [Color], sequenceLabel: String) {
         self.stableID = stableID
@@ -94,6 +76,19 @@ struct FreeReadFeedItem: Identifiable {
         self.symbol = symbol
         self.palette = palette
         self.sequenceLabel = sequenceLabel
+
+        let seed = FreeReadFeedItem.deterministicSeed(stableID)
+        self.visualSeed = seed
+        self.baseLikeCount = 220 + (seed % 9400)
+        self.keyPassage = FreeReadFeedItem.compactPassage(from: body, maxChars: 620)
+
+        let preview = body.count > 320 ? "\(body.prefix(320))..." : body
+        var parts = ["\"\(quote)\"", preview, source]
+        if let sourceURL {
+            parts.append(sourceURL.absoluteString)
+        }
+        parts.append("Shared from Readtounlock")
+        self.shareText = parts.joined(separator: "\n\n")
     }
 
     init(story: FreeReadStory, sequenceLabel: String) {
@@ -1398,15 +1393,18 @@ struct FreeReadRenderItem: Identifiable {
 
 struct FreeReadView: View {
     @EnvironmentObject var appState: AppState
+    @AppStorage("personalizationCategoryCSV") private var personalizationCategoryCSV = ""
     private let likesStorageKey = "freeReadLikedStoryIDs"
-    private let batchSize = 24
-    private let prefetchThreshold = 8
+    private var batchSize: Int { max(1, appState.performanceBudget.freeReadBatchSize) }
+    private var prefetchThreshold: Int { max(1, appState.performanceBudget.freeReadPrefetchThreshold) }
+    private var activePoolCap: Int { max(1, appState.performanceBudget.freeReadActivePoolCap) }
+    private var initialBatchCount: Int { max(1, appState.performanceBudget.freeReadInitialBatches) }
 
     @State private var feed: [FreeReadRenderItem] = []
     @State private var masterPool: [FreeReadFeedItem] = []
     @State private var seedPool: [FreeReadFeedItem] = []
     @State private var seedCursor: Int = 0
-    @State private var activeVibeCategory: PassageCategory?
+    @State private var activeVibeCategories: Set<PassageCategory> = []
     @State private var likedStoryIDs: Set<String> = Set(UserDefaults.standard.array(forKey: "freeReadLikedStoryIDs") as? [String] ?? [])
     @State private var selectedStory: FreeReadFeedItem?
     @State private var didAttemptRemoteLoad = false
@@ -1439,6 +1437,7 @@ struct FreeReadView: View {
         .background(DS.bg)
         .onAppear {
             bootFeedIfNeeded()
+            applyPersonalizationThemes()
             applyPendingVibeIfNeeded()
             if !didAttemptRemoteLoad {
                 didAttemptRemoteLoad = true
@@ -1451,6 +1450,9 @@ struct FreeReadView: View {
             guard let category = newValue else { return }
             applyVibeCategory(category)
             appState.freeReadFocusCategory = nil
+        }
+        .onChange(of: personalizationCategoryCSV) { _, _ in
+            applyPersonalizationThemes()
         }
         .sheet(item: $selectedStory) { story in
             FreeReadDetailView(
@@ -1466,7 +1468,10 @@ struct FreeReadView: View {
         if masterPool.isEmpty {
             masterPool = FreeReadFeedItem.seedPool
         }
-        rebuildFeed(for: activeVibeCategory)
+        if activeVibeCategories.isEmpty {
+            activeVibeCategories = defaultThemeCategories
+        }
+        rebuildFeed(for: activeVibeCategories)
     }
 
     private func appendBatch() {
@@ -1514,7 +1519,7 @@ struct FreeReadView: View {
             }
 
             masterPool = remoteItems
-            rebuildFeed(for: activeVibeCategory)
+            rebuildFeed(for: activeVibeCategories)
         }
     }
 
@@ -1525,25 +1530,41 @@ struct FreeReadView: View {
     }
 
     private func applyVibeCategory(_ category: PassageCategory) {
-        activeVibeCategory = category
-        rebuildFeed(for: category)
+        activeVibeCategories = [category]
+        rebuildFeed(for: activeVibeCategories)
     }
 
-    private func rebuildFeed(for category: PassageCategory?) {
+    private func applyPersonalizationThemes() {
+        guard appState.freeReadFocusCategory == nil else { return }
+        activeVibeCategories = defaultThemeCategories
+        rebuildFeed(for: activeVibeCategories)
+    }
+
+    private var defaultThemeCategories: Set<PassageCategory> {
+        let themes = decodeStoredCategories(from: personalizationCategoryCSV)
+        return themes.isEmpty ? [.psychology] : themes
+    }
+
+    private func rebuildFeed(for categories: Set<PassageCategory>) {
         let basePool = masterPool.isEmpty ? FreeReadFeedItem.seedPool : masterPool
+        let activeCategories = categories.isEmpty ? [.psychology] : categories
         let filteredPool: [FreeReadFeedItem]
-        if let category {
-            let matches = basePool.filter { $0.category == category }
-            filteredPool = matches.isEmpty ? basePool : matches
+        let matches = basePool.filter { activeCategories.contains($0.category) }
+        filteredPool = matches.isEmpty ? basePool : matches
+
+        let activePool: [FreeReadFeedItem]
+        if filteredPool.count > activePoolCap {
+            activePool = Array(filteredPool.shuffled().prefix(activePoolCap))
         } else {
-            filteredPool = basePool
+            activePool = filteredPool
         }
 
-        seedPool = filteredPool.shuffled()
+        seedPool = activePool.shuffled()
         seedCursor = 0
         feed.removeAll()
-        appendBatch()
-        appendBatch()
+        for _ in 0..<initialBatchCount {
+            appendBatch()
+        }
     }
 }
 
@@ -1553,6 +1574,7 @@ struct FreeReadCard: View {
     let onLike: () -> Void
     let onOpen: () -> Void
 
+    private var theme: CategoryTheme { item.category.theme }
     private var likeCount: Int { item.baseLikeCount + (isLiked ? 1 : 0) }
     private var titleFontSize: CGFloat {
         let length = item.title.count
@@ -1599,16 +1621,16 @@ struct FreeReadCard: View {
     private var backgroundLayer: some View {
         LinearGradient(
             colors: [
-                item.palette[2].opacity(0.88),
-                DS.bg,
-                item.palette[0].opacity(0.35)
+                theme.deepReadBackground,
+                theme.gradientStart.opacity(0.9),
+                theme.gradientEnd.opacity(0.55)
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
         .overlay(
             LinearGradient(
-                colors: [Color.black.opacity(0.15), Color.black.opacity(0.0), Color.black.opacity(0.34)],
+                colors: [Color.black.opacity(0.12), Color.black.opacity(0.0), Color.black.opacity(0.36)],
                 startPoint: .top,
                 endPoint: .bottom
             )
@@ -1624,12 +1646,12 @@ struct FreeReadCard: View {
                     .foregroundStyle(.black)
                     .padding(.horizontal, 9)
                     .padding(.vertical, 4)
-                    .background(item.category.color)
+                    .background(theme.chipBackground)
                     .clipShape(Capsule())
 
                 Text(item.sequenceLabel)
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(DS.label4)
+                    .foregroundStyle(theme.accent.opacity(0.95))
             }
             .padding(.top, 18)
             .padding(.bottom, 12)
@@ -1694,8 +1716,12 @@ struct FreeReadCard: View {
                         .font(.system(size: 23, weight: .bold))
                         .foregroundStyle(isLiked ? .red : .white)
                         .frame(width: 48, height: 48)
-                        .background(Color.black.opacity(0.32))
+                        .background(theme.gradientStart.opacity(0.58))
                         .clipShape(Circle())
+                        .overlay(
+                            Circle()
+                                .strokeBorder(theme.accent.opacity(0.4), lineWidth: 1)
+                        )
 
                     Text(formatCount(likeCount))
                         .font(.system(size: 11, weight: .bold))
@@ -1710,8 +1736,12 @@ struct FreeReadCard: View {
                         .font(.system(size: 20, weight: .bold))
                         .foregroundStyle(.white)
                         .frame(width: 48, height: 48)
-                        .background(Color.black.opacity(0.32))
+                        .background(theme.gradientStart.opacity(0.58))
                         .clipShape(Circle())
+                        .overlay(
+                            Circle()
+                                .strokeBorder(theme.accent.opacity(0.4), lineWidth: 1)
+                        )
 
                     Text("Share")
                         .font(.system(size: 11, weight: .bold))
@@ -1738,6 +1768,7 @@ struct FreeReadDetailView: View {
     let item: FreeReadFeedItem
     let isLiked: Bool
     let onLike: () -> Void
+    private var theme: CategoryTheme { item.category.theme }
     private var titleFontSize: CGFloat {
         let length = item.title.count
         if length <= 24 { return 40 }
@@ -1765,7 +1796,7 @@ struct FreeReadDetailView: View {
                         .foregroundStyle(.black)
                         .padding(.horizontal, 9)
                         .padding(.vertical, 4)
-                        .background(item.category.color)
+                        .background(theme.chipBackground)
                         .clipShape(Capsule())
                         .padding(.bottom, 12)
 
@@ -1810,7 +1841,7 @@ struct FreeReadDetailView: View {
                             .foregroundStyle(.black)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 10)
-                            .background(DS.accent)
+                            .background(theme.accent)
                             .clipShape(Capsule())
                         }
                         .buttonStyle(.plain)
@@ -1821,7 +1852,17 @@ struct FreeReadDetailView: View {
                 .padding(.top, 12)
                 .padding(.bottom, 16)
             }
-            .background(DS.bg)
+            .background(
+                LinearGradient(
+                    colors: [
+                        theme.deepReadBackground,
+                        theme.gradientStart.opacity(0.55),
+                        DS.bg
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
             .navigationTitle("Free Read")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1829,17 +1870,17 @@ struct FreeReadDetailView: View {
                     Button("Close") {
                         dismiss()
                     }
-                    .foregroundStyle(DS.accent)
+                    .foregroundStyle(theme.accent)
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button(action: onLike) {
                         Image(systemName: isLiked ? "heart.fill" : "heart")
-                            .foregroundStyle(isLiked ? Color.red : DS.label2)
+                            .foregroundStyle(isLiked ? Color.red : theme.accent.opacity(0.95))
                     }
 
                     ShareLink(item: item.shareText) {
                         Image(systemName: "paperplane.fill")
-                            .foregroundStyle(DS.label2)
+                            .foregroundStyle(theme.accent.opacity(0.95))
                     }
                 }
             }
@@ -1855,74 +1896,72 @@ struct HomeView: View {
     @EnvironmentObject var screenTime: ScreenTimeManager
     @State private var showScreenTimeSetup = false
     @State private var showPersonalization = false
+    @State private var didIntroAnimate = false
+    @State private var rankedFeedCache: [Passage] = []
+    @State private var featuredCache: [Passage] = []
+    @State private var communityCache: [Passage] = []
     @AppStorage("personalizationCategoryCSV") private var personalizationCategoryCSV = ""
     @AppStorage("personalizationPrompt") private var personalizationPrompt = ""
 
     private let discoverTopics: [(icon: String, title: String, color: Color, category: PassageCategory)] = [
-        ("person.crop.circle.badge.checkmark", "Self-Growth", Color(hex: "EDBE53"), .psychology),
-        ("bubble.left.and.text.bubble.right", "Communication", Color(hex: "D4A853"), .philosophy),
-        ("briefcase", "Career & Business", Color(hex: "C48B5C"), .economics),
-        ("book.closed", "Fiction", Color(hex: "B8A472"), .literature),
-        ("banknote", "Finance & Economics", Color(hex: "C9A65A"), .economics),
-        ("heart", "Relationships", Color(hex: "C49670"), .psychology),
+        ("brain", "Self-Growth", PassageCategory.psychology.theme.accent, .psychology),
+        ("bolt.fill", "Focus", PassageCategory.science.theme.accent, .science),
+        ("bubble.left.and.text.bubble.right.fill", "Communication", PassageCategory.philosophy.theme.accent, .philosophy),
+        ("briefcase.fill", "Career", PassageCategory.technology.theme.accent, .technology),
+        ("banknote.fill", "Money", PassageCategory.economics.theme.accent, .economics),
+        ("person.2.fill", "Relationships", PassageCategory.literature.theme.accent, .literature),
     ]
 
-    private let moodPrompts: [(title: String, subtitle: String, category: PassageCategory)] = [
-        ("Taking a late walk", "wanting something reflective", .philosophy),
-        ("Before a hard conversation", "wanting clear words", .psychology),
-        ("When focus feels low", "wanting sharp concentration", .science),
-        ("After a long day", "wanting calm and reset", .literature),
+    private let moodPrompts: [(title: String, subtitle: String, icon: String, category: PassageCategory)] = [
+        ("Taking a late walk", "wanting something reflective", "moon.stars.fill", .philosophy),
+        ("Before a hard conversation", "wanting clear words", "bubble.left.and.text.bubble.right.fill", .psychology),
+        ("When focus feels low", "wanting sharp concentration", "bolt.fill", .science),
+        ("After a long day", "wanting calm and reset", "book.fill", .literature),
     ]
 
     private var preferredCategories: Set<PassageCategory> {
         decodeStoredCategories(from: personalizationCategoryCSV)
     }
 
-    private var personalizedFeed: [Passage] {
-        let all = PassageLibrary.all.sorted { passageImpactScore($0) > passageImpactScore($1) }
-        guard !preferredCategories.isEmpty else { return all }
-
-        let prioritized = all.filter { preferredCategories.contains($0.category) }
-        let fallback = all.filter { !preferredCategories.contains($0.category) }
-        return prioritized + fallback
+    private var activeCurationCategories: Set<PassageCategory> {
+        preferredCategories.isEmpty ? [.psychology] : preferredCategories
     }
 
-    private var featuredCandidatePool: [Passage] {
-        let feed = personalizedFeed
-        guard !feed.isEmpty else { return [] }
-        let candidateCount = min(feed.count, 24)
-        return Array(feed.prefix(candidateCount))
+    private var personalizedFeed: [Passage] {
+        rankedFeedCache.isEmpty ? computeRankedFeed() : rankedFeedCache
     }
 
     private var featuredPassages: [Passage] {
-        let shuffled = featuredCandidatePool.sorted {
-            featuredShuffleValue(for: $0) < featuredShuffleValue(for: $1)
-        }
-        return Array(shuffled.prefix(6))
+        featuredCache.isEmpty ? buildFeatured(from: personalizedFeed) : featuredCache
     }
 
     private var communityPassages: [Passage] {
-        let featuredIDs = Set(featuredPassages.map(\.id))
-        let remainder = personalizedFeed.filter { !featuredIDs.contains($0.id) }
-        return Array(remainder.prefix(6))
+        communityCache.isEmpty
+            ? buildCommunity(from: personalizedFeed, featured: featuredPassages)
+            : communityCache
     }
 
     private var quickStartPassages: [Passage] {
         Array(personalizedFeed.prefix(3))
     }
 
+    private var curationMatchCount: Int {
+        PassageLibrary.all.filter { activeCurationCategories.contains($0.category) }.count
+    }
+
     private var discoverSubtitle: String {
-        if !personalizationPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return personalizationPrompt
+        let prompt = personalizationPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !prompt.isEmpty {
+            return "Curating your home feed for: \(prompt)"
         }
         if !preferredCategories.isEmpty {
-            return "Your learning plan is active. Pick what to dive into next."
+            return "Your growth goals are shaping Featured and Quick Starts."
         }
-        return "Hey \(appState.userName.isEmpty ? "Reader" : appState.userName), pick what to learn next."
+        return "Self-Growth is active by default. Pick topics to tune your feed."
     }
 
     private var featuredTitle: String {
-        preferredCategories.isEmpty ? "Featured" : "For You"
+        preferredCategories.isEmpty ? "Featured for Self-Growth" : "Featured for Your Focus"
     }
     
     var body: some View {
@@ -1932,12 +1971,13 @@ struct HomeView: View {
                     // Header
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Discover")
+                            Text("Home Feed")
                                 .font(.system(size: 42, weight: .bold, design: .serif))
                                 .tracking(-0.8)
                             Text(discoverSubtitle)
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundStyle(DS.label3)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                         Spacer()
 
@@ -1955,20 +1995,25 @@ struct HomeView: View {
                     }
                     .padding(.bottom, 14)
 
-                    CreateLessonPromptCard {
-                        showPersonalization = true
-                    }
-                    .padding(.bottom, 14)
-
-                    if !preferredCategories.isEmpty {
-                        PersonalizedPlanSummaryCard(
-                            selectedCategories: preferredCategories,
-                            customPrompt: personalizationPrompt
-                        ) {
+                    CreateLessonPromptCard(
+                        selectedCategories: activeCurationCategories,
+                        customPrompt: personalizationPrompt,
+                        matchedCount: curationMatchCount,
+                        featuredCount: featuredPassages.count,
+                        quickStartCount: quickStartPassages.count,
+                        hasExplicitSelections: !preferredCategories.isEmpty,
+                        action: {
                             showPersonalization = true
+                        },
+                        activateSelfGrowth: {
+                            personalizationCategoryCSV = encodeStoredCategories([.psychology])
                         }
-                        .padding(.bottom, 14)
-                    }
+                    )
+                    .padding(.bottom, 12)
+
+                    Text("Curate by topic")
+                        .font(.system(size: 16, weight: .bold))
+                        .padding(.bottom, 8)
 
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
@@ -1977,14 +2022,40 @@ struct HomeView: View {
                                     icon: topic.icon,
                                     title: topic.title,
                                     color: topic.color,
-                                    isSelected: preferredCategories.contains(topic.category)
+                                    isSelected: activeCurationCategories.contains(topic.category)
                                 ) {
                                     togglePreferredCategory(topic.category)
                                 }
                             }
                         }
                     }
-                    .padding(.bottom, 20)
+                    .padding(.bottom, 18)
+
+                    Text("Learn by mood")
+                        .font(.system(size: 40, weight: .bold, design: .serif))
+                        .tracking(-0.7)
+                        .padding(.bottom, 6)
+
+                    Text("Start with how you feel and jump into the right read.")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(DS.label3)
+                        .padding(.bottom, 10)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(moodPrompts, id: \.title) { mood in
+                                MoodPromptCard(
+                                    title: mood.title,
+                                    subtitle: mood.subtitle,
+                                    icon: mood.icon,
+                                    category: mood.category
+                                ) {
+                                    startMoodReading(for: mood.category)
+                                }
+                            }
+                        }
+                    }
+                    .padding(.bottom, 22)
 
                     Text(featuredTitle)
                         .font(.system(size: 42, weight: .bold, design: .serif))
@@ -1996,22 +2067,6 @@ struct HomeView: View {
                             ForEach(featuredPassages) { passage in
                                 FeaturedLessonCard(passage: passage) {
                                     appState.startReading(passage)
-                                }
-                            }
-                        }
-                    }
-                    .padding(.bottom, 22)
-
-                    Text("Learn by mood")
-                        .font(.system(size: 40, weight: .bold, design: .serif))
-                        .tracking(-0.7)
-                        .padding(.bottom, 10)
-
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 10) {
-                            ForEach(moodPrompts, id: \.title) { mood in
-                                MoodPromptCard(title: mood.title, subtitle: mood.subtitle) {
-                                    startMoodReading(for: mood.category)
                                 }
                             }
                         }
@@ -2099,7 +2154,7 @@ struct HomeView: View {
                     
                     // Suggested readings
                     SectionHeader(
-                        title: preferredCategories.isEmpty ? "Quick Starts" : "Quick Starts for Your Plan",
+                        title: preferredCategories.isEmpty ? "Quick Starts for Self-Growth" : "Quick Starts for Your Plan",
                         trailing: "See All",
                         trailingAction: { appState.selectedTab = .library }
                     )
@@ -2114,6 +2169,9 @@ struct HomeView: View {
                 }
                 .padding(.horizontal, DS.screenPadding)
                 .padding(.bottom, 20)
+                .opacity(didIntroAnimate ? 1.0 : 0.95)
+                .offset(y: didIntroAnimate ? 0 : 8)
+                .animation(.spring(response: 0.4, dampingFraction: 0.85), value: didIntroAnimate)
             }
             .background(DS.bg)
             .navigationBarHidden(true)
@@ -2121,6 +2179,21 @@ struct HomeView: View {
         .onAppear {
             appState.refreshDailyUnlockCreditsIfNeeded()
             screenTime.bootstrap()
+            if rankedFeedCache.isEmpty {
+                rebuildHomeFeedCaches()
+            } else {
+                refreshHomeSurfaceOrdering()
+            }
+            didIntroAnimate = true
+        }
+        .onChange(of: personalizationCategoryCSV) { _, _ in
+            rebuildHomeFeedCaches()
+        }
+        .onChange(of: personalizationPrompt) { _, _ in
+            rebuildHomeFeedCaches()
+        }
+        .onChange(of: appState.featuredRotationSeed) { _, _ in
+            refreshHomeSurfaceOrdering()
         }
         .sheet(isPresented: $showScreenTimeSetup) {
             ScreenTimeSetupView()
@@ -2136,6 +2209,11 @@ struct HomeView: View {
     }
 
     private func togglePreferredCategory(_ category: PassageCategory) {
+        if preferredCategories.isEmpty {
+            personalizationCategoryCSV = encodeStoredCategories([category])
+            return
+        }
+
         var updated = preferredCategories
         if updated.contains(category) {
             updated.remove(category)
@@ -2159,6 +2237,55 @@ struct HomeView: View {
     private func openFreeRead(for category: PassageCategory) {
         appState.freeReadFocusCategory = category
         appState.selectedTab = .freeRead
+    }
+
+    private func rebuildHomeFeedCaches() {
+        let ranked = computeRankedFeed()
+        rankedFeedCache = ranked
+        featuredCache = buildFeatured(from: ranked)
+        communityCache = buildCommunity(from: ranked, featured: featuredCache)
+    }
+
+    private func refreshHomeSurfaceOrdering() {
+        let ranked = rankedFeedCache.isEmpty ? computeRankedFeed() : rankedFeedCache
+        featuredCache = buildFeatured(from: ranked)
+        communityCache = buildCommunity(from: ranked, featured: featuredCache)
+    }
+
+    private func computeRankedFeed() -> [Passage] {
+        let all = PassageLibrary.all.sorted { passageImpactScore($0) > passageImpactScore($1) }
+        let focusCategories = activeCurationCategories
+        let prioritized = all.filter { focusCategories.contains($0.category) }
+        guard !prioritized.isEmpty else { return all }
+
+        let fallback = all.filter { !focusCategories.contains($0.category) }
+        return prioritized + fallback
+    }
+
+    private func buildFeatured(from feed: [Passage]) -> [Passage] {
+        guard !feed.isEmpty else { return [] }
+        let candidateCount = min(feed.count, appState.performanceBudget.homeFeaturedCandidateCount)
+        let focused = feed.filter { activeCurationCategories.contains($0.category) }
+        let fallback = feed.filter { !activeCurationCategories.contains($0.category) }
+
+        var candidates: [Passage] = Array(focused.prefix(candidateCount))
+        if candidates.count < candidateCount {
+            candidates.append(contentsOf: fallback.prefix(candidateCount - candidates.count))
+        }
+        if candidates.isEmpty {
+            candidates = Array(feed.prefix(candidateCount))
+        }
+
+        let shuffled = candidates.sorted { featuredShuffleValue(for: $0) < featuredShuffleValue(for: $1) }
+        return Array(shuffled.prefix(appState.performanceBudget.homeFeaturedCount))
+    }
+
+    private func buildCommunity(from feed: [Passage], featured: [Passage]) -> [Passage] {
+        let featuredIDs = Set(featured.map(\.id))
+        let remainder = feed.filter { !featuredIDs.contains($0.id) }
+        let focused = remainder.filter { activeCurationCategories.contains($0.category) }
+        let fallback = remainder.filter { !activeCurationCategories.contains($0.category) }
+        return Array((focused + fallback).prefix(appState.performanceBudget.homeCommunityCount))
     }
 
     private func passageImpactScore(_ passage: Passage) -> Double {
@@ -2221,51 +2348,121 @@ struct HomeView: View {
 }
 
 struct CreateLessonPromptCard: View {
+    let selectedCategories: Set<PassageCategory>
+    let customPrompt: String
+    let matchedCount: Int
+    let featuredCount: Int
+    let quickStartCount: Int
+    let hasExplicitSelections: Bool
     let action: () -> Void
+    let activateSelfGrowth: () -> Void
+
+    private var focusLine: String {
+        let prompt = customPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !prompt.isEmpty {
+            return prompt
+        }
+
+        let labels = selectedCategories
+            .map(\.rawValue)
+            .sorted()
+
+        guard !labels.isEmpty else { return "Self-Growth" }
+        if labels.count <= 2 { return labels.joined(separator: " • ") }
+        return "\(labels[0]) • \(labels[1]) +\(labels.count - 2)"
+    }
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 14) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Make My Own Lesson")
-                        .font(.system(size: 30, weight: .bold, design: .serif))
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Curate Home Feed")
+                        .font(.system(size: 31, weight: .bold, design: .serif))
                         .tracking(-0.4)
                         .foregroundStyle(.white)
-                    Text("Describe what you want to learn and we’ll build a reading path.")
-                        .font(.system(size: 14, weight: .medium))
+                    Text(focusLine)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(DS.accentLight)
+                        .lineLimit(2)
+                    Text("This focus controls your Featured and Quick Starts.")
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(DS.label3)
                         .lineLimit(2)
                 }
 
                 Spacer(minLength: 0)
 
-                HStack(spacing: 6) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 12, weight: .bold))
-                    Text("Create")
-                        .font(.system(size: 18, weight: .bold))
+                Button(action: action) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.system(size: 11, weight: .bold))
+                        Text("Edit")
+                            .font(.system(size: 14, weight: .bold))
+                    }
+                    .foregroundStyle(.black)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .background(.white)
+                    .clipShape(Capsule())
                 }
-                .foregroundStyle(.black)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(.white)
-                .clipShape(Capsule())
+                .buttonStyle(.plain)
             }
-            .padding(16)
-            .background(
-                LinearGradient(
-                    colors: [Color(hex: "3D2615"), Color(hex: "2A1B10"), Color(hex: "1A130A")],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 24))
-            .overlay(
-                RoundedRectangle(cornerRadius: 24)
-                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
-            )
+
+            HStack(spacing: 8) {
+                HomeFeedMetricPill(value: "\(matchedCount)", label: "Matches")
+                HomeFeedMetricPill(value: "\(featuredCount)", label: "Featured")
+                HomeFeedMetricPill(value: "\(quickStartCount)", label: "Quick")
+            }
+
+            if !hasExplicitSelections {
+                Button(action: activateSelfGrowth) {
+                    Text("Lock in Self-Growth")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(DS.accent)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
         }
-        .buttonStyle(.plain)
+        .padding(16)
+        .background(
+            LinearGradient(
+                colors: [Color(hex: "3D2615"), Color(hex: "2A1B10"), Color(hex: "1A130A")],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 24))
+        .overlay(
+            RoundedRectangle(cornerRadius: 24)
+                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+        )
+    }
+}
+
+private struct HomeFeedMetricPill: View {
+    let value: String
+    let label: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(value)
+                .font(.system(size: 17, weight: .bold, design: .monospaced))
+                .foregroundStyle(.white)
+            Text(label)
+                .font(.system(size: 10, weight: .semibold))
+                .textCase(.uppercase)
+                .tracking(0.4)
+                .foregroundStyle(DS.label3)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 9)
+        .padding(.horizontal, 10)
+        .background(Color.black.opacity(0.16))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 }
 
@@ -2296,6 +2493,7 @@ struct DiscoverTopicChip: View {
             )
         }
         .buttonStyle(.plain)
+        .animation(.spring(response: 0.25, dampingFraction: 0.8), value: isSelected)
     }
 }
 
@@ -2735,6 +2933,7 @@ struct FeaturedLessonCard: View {
     var compact: Bool = false
     let action: () -> Void
 
+    private var theme: CategoryTheme { passage.category.theme }
     private var cardWidth: CGFloat { compact ? 152 : 182 }
     private var cardHeight: CGFloat { compact ? 194 : 252 }
     private var visualSeed: Int {
@@ -2767,28 +2966,9 @@ struct FeaturedLessonCard: View {
         case .technology: return "Builder vibe"
         }
     }
-    private var coverGradient: [Color] {
-        switch passage.category {
-        case .science:
-            return [Color(hex: "22413B"), Color(hex: "2B645A"), Color(hex: "18312C")]
-        case .history:
-            return [Color(hex: "3A2E1C"), Color(hex: "6B4A2B"), Color(hex: "231A10")]
-        case .philosophy:
-            return [Color(hex: "2F3223"), Color(hex: "56613A"), Color(hex: "1B2014")]
-        case .economics:
-            return [Color(hex: "2B3D2C"), Color(hex: "4D6B49"), Color(hex: "192518")]
-        case .psychology:
-            return [Color(hex: "3B2C2A"), Color(hex: "6B4A44"), Color(hex: "251917")]
-        case .literature:
-            return [Color(hex: "2B2F3B"), Color(hex: "4A5570"), Color(hex: "171B23")]
-        case .mathematics:
-            return [Color(hex: "2A3138"), Color(hex: "3E5464"), Color(hex: "161D24")]
-        case .technology:
-            return [Color(hex: "1D2B3A"), Color(hex: "315D7A"), Color(hex: "121B25")]
-        }
-    }
+    private var coverGradient: [Color] { [theme.gradientStart, theme.gradientEnd, theme.deepReadBackground] }
     private var footerColors: [Color] {
-        [Color.white.opacity(0.18), Color.white.opacity(0.08), Color.white.opacity(0.03)]
+        [theme.accent.opacity(0.2), Color.white.opacity(0.08), Color.white.opacity(0.03)]
     }
 
     var body: some View {
@@ -2804,7 +2984,13 @@ struct FeaturedLessonCard: View {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
             )
-            .shadow(color: .black.opacity(0.34), radius: 12, x: 0, y: 10)
+            .overlay(alignment: .top) {
+                Rectangle()
+                    .fill(theme.accent.opacity(0.85))
+                    .frame(height: 3)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .shadow(color: .black.opacity(0.28), radius: 8, x: 0, y: 6)
         }
         .buttonStyle(SnappyCardButtonStyle())
     }
@@ -2826,7 +3012,7 @@ struct FeaturedLessonCard: View {
                     .foregroundStyle(.black.opacity(0.85))
                     .padding(.horizontal, compact ? 8 : 10)
                     .padding(.vertical, 4)
-                    .background(passage.category.color.opacity(0.95))
+                    .background(theme.chipBackground.opacity(0.95))
                     .clipShape(Capsule())
 
                 Spacer(minLength: 0)
@@ -2879,9 +3065,9 @@ struct FeaturedLessonCard: View {
             Spacer(minLength: 6)
 
             HStack(spacing: 4) {
-                Image(systemName: "clock.fill")
+                Image(systemName: "book.fill")
                     .font(.system(size: compact ? 9 : 10, weight: .bold))
-                Text(passage.readTimeLabel)
+                Text("Open")
                     .font(.system(size: compact ? 11 : 12, weight: .bold))
             }
             .foregroundStyle(.white.opacity(0.88))
@@ -2909,11 +3095,6 @@ struct FeaturedLessonCard: View {
                 .frame(width: compact ? 68 : 88, height: compact ? 92 : 114)
                 .rotationEffect(.degrees(Double((visualSeed % 10) - 5)))
                 .offset(x: compact ? 30 : 38, y: compact ? 34 : 44)
-
-            Circle()
-                .stroke(Color.white.opacity(0.17), lineWidth: 1)
-                .frame(width: compact ? 24 : 32, height: compact ? 24 : 32)
-                .offset(x: compact ? 24 : 30, y: compact ? 18 : 24)
         }
     }
 }
@@ -2921,13 +3102,30 @@ struct FeaturedLessonCard: View {
 struct MoodPromptCard: View {
     let title: String
     let subtitle: String
+    let icon: String
+    let category: PassageCategory
     var onTap: (() -> Void)? = nil
 
     var body: some View {
         Button {
             onTap?()
         } label: {
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: icon)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .background(category.theme.chipBackground)
+                        .clipShape(Capsule())
+
+                    Text(category.rawValue.uppercased())
+                        .font(.system(size: 10, weight: .black))
+                        .tracking(0.8)
+                        .foregroundStyle(DS.label4)
+                }
+
                 Text(title)
                     .font(.system(size: 18, weight: .bold))
                     .foregroundStyle(.white)
@@ -2941,11 +3139,21 @@ struct MoodPromptCard: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
             .frame(width: 290, alignment: .leading)
-            .background(DS.surface)
+            .background(
+                LinearGradient(
+                    colors: [
+                        category.theme.gradientStart.opacity(0.52),
+                        DS.surface,
+                        category.theme.gradientEnd.opacity(0.35)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
             .clipShape(RoundedRectangle(cornerRadius: 20))
             .overlay(
                 RoundedRectangle(cornerRadius: 20)
-                    .strokeBorder(DS.separator, lineWidth: 1)
+                    .strokeBorder(category.theme.accent.opacity(0.4), lineWidth: 1)
             )
         }
         .buttonStyle(SnappyCardButtonStyle())
@@ -3190,7 +3398,6 @@ struct BlockedAppRow: View {
     }
 }
 
-@MainActor
 final class GutendexService {
     static let shared = GutendexService()
 

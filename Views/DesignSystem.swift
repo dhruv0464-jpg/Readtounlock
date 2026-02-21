@@ -28,6 +28,87 @@ enum DS {
     static let smallRadius: CGFloat = 10
 }
 
+// MARK: - Category Theme
+
+struct CategoryTheme {
+    let accent: Color
+    let gradientStart: Color
+    let gradientEnd: Color
+    let chipBackground: Color
+    let deepReadBackground: Color
+}
+
+extension PassageCategory {
+    var theme: CategoryTheme {
+        switch self {
+        case .science:
+            return CategoryTheme(
+                accent: Color(hex: "6EC9B1"),
+                gradientStart: Color(hex: "1D3E36"),
+                gradientEnd: Color(hex: "2E6B5D"),
+                chipBackground: Color(hex: "95E5D2"),
+                deepReadBackground: Color(hex: "0E1B18")
+            )
+        case .history:
+            return CategoryTheme(
+                accent: Color(hex: "D6B27A"),
+                gradientStart: Color(hex: "2F2417"),
+                gradientEnd: Color(hex: "6A4A2C"),
+                chipBackground: Color(hex: "E8C58E"),
+                deepReadBackground: Color(hex: "171109")
+            )
+        case .philosophy:
+            return CategoryTheme(
+                accent: Color(hex: "C9C786"),
+                gradientStart: Color(hex: "252919"),
+                gradientEnd: Color(hex: "4B5B32"),
+                chipBackground: Color(hex: "E2E29E"),
+                deepReadBackground: Color(hex: "12140C")
+            )
+        case .economics:
+            return CategoryTheme(
+                accent: Color(hex: "E6C46B"),
+                gradientStart: Color(hex: "2A2617"),
+                gradientEnd: Color(hex: "5C4E2A"),
+                chipBackground: Color(hex: "F2D887"),
+                deepReadBackground: Color(hex: "171209")
+            )
+        case .psychology:
+            return CategoryTheme(
+                accent: Color(hex: "D7A98A"),
+                gradientStart: Color(hex: "2F211E"),
+                gradientEnd: Color(hex: "6A4A40"),
+                chipBackground: Color(hex: "EAC0A3"),
+                deepReadBackground: Color(hex: "17100E")
+            )
+        case .literature:
+            return CategoryTheme(
+                accent: Color(hex: "9EB8E8"),
+                gradientStart: Color(hex: "1B2130"),
+                gradientEnd: Color(hex: "3D4F75"),
+                chipBackground: Color(hex: "BAD0F2"),
+                deepReadBackground: Color(hex: "0E121A")
+            )
+        case .mathematics:
+            return CategoryTheme(
+                accent: Color(hex: "9BC2DD"),
+                gradientStart: Color(hex: "1B222B"),
+                gradientEnd: Color(hex: "345062"),
+                chipBackground: Color(hex: "B7D8EF"),
+                deepReadBackground: Color(hex: "0D1218")
+            )
+        case .technology:
+            return CategoryTheme(
+                accent: Color(hex: "89BCE6"),
+                gradientStart: Color(hex: "172331"),
+                gradientEnd: Color(hex: "2D5D7F"),
+                chipBackground: Color(hex: "A8D4F4"),
+                deepReadBackground: Color(hex: "0C131B")
+            )
+        }
+    }
+}
+
 // MARK: - Primary Button
 
 struct PrimaryButton: View {
@@ -186,10 +267,10 @@ struct CategoryBadge: View {
             .font(.system(size: 11, weight: .bold))
             .textCase(.uppercase)
             .tracking(0.8)
-            .foregroundStyle(category.color)
+            .foregroundStyle(.black.opacity(0.88))
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
-            .background(category.color.opacity(0.15))
+            .background(category.theme.chipBackground.opacity(0.96))
             .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 }

@@ -56,6 +56,26 @@ enum MainTab: String, CaseIterable {
     }
 }
 
+struct PerformanceBudget {
+    let homeFeaturedCount: Int
+    let homeCommunityCount: Int
+    let homeFeaturedCandidateCount: Int
+    let freeReadActivePoolCap: Int
+    let freeReadBatchSize: Int
+    let freeReadInitialBatches: Int
+    let freeReadPrefetchThreshold: Int
+
+    static let testingLight = PerformanceBudget(
+        homeFeaturedCount: 4,
+        homeCommunityCount: 4,
+        homeFeaturedCandidateCount: 12,
+        freeReadActivePoolCap: 24,
+        freeReadBatchSize: 6,
+        freeReadInitialBatches: 1,
+        freeReadPrefetchThreshold: 2
+    )
+}
+
 class AppState: ObservableObject {
     static let dailyFreeUnlockLimit = 3
     static let dailyFreeReadLimit = 5
@@ -87,6 +107,10 @@ class AppState: ObservableObject {
 
     var hasUnlimitedAccess: Bool {
         isPremiumUser || Self.disablePaywallsForTesting
+    }
+
+    var performanceBudget: PerformanceBudget {
+        .testingLight
     }
 
     init() {
